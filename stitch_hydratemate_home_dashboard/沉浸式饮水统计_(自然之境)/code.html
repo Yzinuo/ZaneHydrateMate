@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>森系沉浸式统计 (通透版)</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        nature: {
+                            950: '#0a1a0a',
+                            900: '#1B5E20',
+                            800: '#2E7D32',
+                            600: '#43A047',
+                            500: '#4CAF50',
+                            400: '#81C784',
+                            300: '#A5D6A7',
+                            200: '#C8E6C9',
+                            50: '#F1F8E9',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ["Noto Sans SC", "sans-serif"],
+                    },
+                    borderRadius: {
+                        '3xl': '2rem',
+                        '4xl': '3rem',
+                    }
+                },
+            },
+        };
+    </script>
+<style type="text/tailwindcss">
+        @layer base {
+            body {
+                @apply font-sans antialiased text-white selection:bg-nature-500/30;
+                min-height: 100dvh;
+            }
+        }
+        .ultra-glass {
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(16px) saturate(140%);
+            -webkit-backdrop-filter: blur(16px) saturate(140%);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+        .ultra-glass-light {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .text-glow {
+            text-shadow: 0 0 12px rgba(255, 255, 255, 0.3);
+        }
+        .green-glow {
+            box-shadow: 0 0 15px rgba(76, 175, 80, 0.5);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-nature-950 overflow-hidden">
+<div class="fixed inset-0 z-0">
+<img alt="Deep sun-drenched forest" class="w-full h-full object-cover brightness-75 contrast-[1.1]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBq0H_Jp3HT6b1UVdu5e0IPddQ6jC02JFFL9_jOEzYnZ0xuaCbDiKmtdOGKzJfYd31fY9yXU53ZBiBCztDhV10pG2gpqsKCL_feTXVfSluPf74cGDmhyOm8iO0dOtVN_lAXKCbJEK5Y-N5S2QaOWnaUNBzJcrzQVIdrr59JjN4sUFiL0x-5_Kmjvxs6ELxno2hVFOSmsTAoY8eB5_blDbNIcFndSWEF0B4v8ypNCXzCSbqTixeIUH_9Mekug6tE32iccay4C_JPH_Y9"/>
+<div class="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-nature-950/40"></div>
+<div class="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(255,255,255,0.15)_0%,transparent_50%)]"></div>
+</div>
+<div class="relative z-10 max-w-md mx-auto h-screen flex flex-col">
+<header class="flex items-center justify-between px-6 pt-14 pb-4">
+<button class="w-11 h-11 rounded-full ultra-glass flex items-center justify-center active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-white text-[22px]">arrow_back_ios_new</span>
+</button>
+<h1 class="text-xl font-bold text-white tracking-widest text-glow">统计报告</h1>
+<button class="w-11 h-11 rounded-full ultra-glass flex items-center justify-center active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-white text-[24px]">calendar_month</span>
+</button>
+</header>
+<main class="flex-1 px-5 space-y-5 overflow-y-auto no-scrollbar pb-10">
+<section class="ultra-glass rounded-3xl p-6">
+<div class="flex justify-between items-start mb-8">
+<div>
+<h2 class="text-xs font-bold text-nature-200 uppercase tracking-widest opacity-80 mb-1">Weekly Insight</h2>
+<h3 class="text-2xl font-bold text-white">本周概览</h3>
+</div>
+<div class="text-right">
+<div class="text-3xl font-black text-nature-400">14.0<span class="text-sm font-medium text-white ml-1">L</span></div>
+<div class="flex items-center gap-1 text-[10px] font-bold text-nature-300 bg-nature-900/40 px-2 py-0.5 rounded-full mt-1 border border-nature-500/30">
+<span class="material-symbols-outlined text-[12px]">trending_up</span>
+<span>高于上周 12%</span>
+</div>
+</div>
+</div>
+<div class="h-44 flex items-end justify-between gap-2.5 px-1">
+<div class="flex flex-col items-center gap-3 flex-1 h-full justify-end">
+<div class="w-full max-w-[12px] bg-white/10 rounded-full h-full relative overflow-hidden flex items-end">
+<div class="w-full bg-nature-400/60 rounded-full" style="height: 40%;"></div>
+</div>
+<span class="text-[11px] font-medium text-white/60">一</span>
+</div>
+<div class="flex flex-col items-center gap-3 flex-1 h-full justify-end">
+<div class="w-full max-w-[12px] bg-white/10 rounded-full h-full relative overflow-hidden flex items-end">
+<div class="w-full bg-nature-400/60 rounded-full" style="height: 60%;"></div>
+</div>
+<span class="text-[11px] font-medium text-white/60">二</span>
+</div>
+<div class="flex flex-col items-center gap-3 flex-1 h-full justify-end">
+<div class="w-full max-w-[12px] bg-white/20 rounded-full h-full relative overflow-hidden flex items-end">
+<div class="w-full bg-nature-500 rounded-full green-glow" style="height: 85%;"></div>
+</div>
+<span class="text-[11px] font-bold text-white">三</span>
+</div>
+<div class="flex flex-col items-center gap-3 flex-1 h-full justify-end">
+<div class="w-full max-w-[12px] bg-white/10 rounded-full h-full relative overflow-hidden flex items-end">
+<div class="w-full bg-nature-400/60 rounded-full" style="height: 50%;"></div>
+</div>
+<span class="text-[11px] font-medium text-white/60">四</span>
+</div>
+<div class="flex flex-col items-center gap-3 flex-1 h-full justify-end">
+<div class="w-full max-w-[12px] bg-white/10 rounded-full h-full relative overflow-hidden flex items-end">
+<div class="w-full bg-nature-400/60 rounded-full" style="height: 70%;"></div>
+</div>
+<span class="text-[11px] font-medium text-white/60">五</span>
+</div>
+<div class="flex flex-col items-center gap-3 flex-1 h-full justify-end">
+<div class="w-full max-w-[12px] bg-white/10 rounded-full h-full relative overflow-hidden flex items-end">
+<div class="w-full bg-nature-400/60 rounded-full" style="height: 35%;"></div>
+</div>
+<span class="text-[11px] font-medium text-white/60">六</span>
+</div>
+<div class="flex flex-col items-center gap-3 flex-1 h-full justify-end">
+<div class="w-full max-w-[12px] bg-white/10 rounded-full h-full relative overflow-hidden flex items-end">
+<div class="w-full bg-nature-400/60 rounded-full" style="height: 45%;"></div>
+</div>
+<span class="text-[11px] font-medium text-white/60">日</span>
+</div>
+</div>
+</section>
+<section class="grid grid-cols-3 gap-3">
+<div class="ultra-glass rounded-2xl p-4 flex flex-col items-center justify-center text-center">
+<span class="material-symbols-outlined text-nature-400 mb-2 text-[24px]">eco</span>
+<span class="text-lg font-bold">5<span class="text-[10px] ml-1 font-normal opacity-70">天</span></span>
+<span class="text-[9px] text-white/60 mt-1 tracking-tighter uppercase">连续达标</span>
+</div>
+<div class="ultra-glass rounded-2xl p-4 flex flex-col items-center justify-center text-center">
+<span class="material-symbols-outlined text-nature-400 mb-2 text-[24px]">opacity</span>
+<span class="text-lg font-bold">14.5<span class="text-[10px] ml-1 font-normal opacity-70">L</span></span>
+<span class="text-[9px] text-white/60 mt-1 tracking-tighter uppercase">累计饮水</span>
+</div>
+<div class="ultra-glass rounded-2xl p-4 flex flex-col items-center justify-center text-center">
+<span class="material-symbols-outlined text-nature-400 mb-2 text-[24px]">bolt</span>
+<span class="text-lg font-bold">2.1<span class="text-[10px] ml-1 font-normal opacity-70">L</span></span>
+<span class="text-[9px] text-white/60 mt-1 tracking-tighter uppercase">日均摄入</span>
+</div>
+</section>
+<section class="ultra-glass rounded-3xl p-6 flex flex-col items-center">
+<div class="w-full flex justify-between items-center mb-6">
+<h3 class="text-lg font-bold">饮水构成</h3>
+<span class="text-[10px] px-2 py-0.5 rounded-md ultra-glass-light text-nature-200">本月</span>
+</div>
+<div class="flex items-center gap-8 w-full">
+<div class="relative w-32 h-32 flex-shrink-0">
+<svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+<circle cx="18" cy="18" fill="none" r="15.9155" stroke="rgba(255,255,255,0.1)" stroke-width="3.5"></circle>
+<circle class="drop-shadow-[0_0_8px_rgba(76,175,80,0.4)]" cx="18" cy="18" fill="none" r="15.9155" stroke="#4CAF50" stroke-dasharray="70, 100" stroke-linecap="round" stroke-width="3.5"></circle>
+<circle cx="18" cy="18" fill="none" r="15.9155" stroke="#81C784" stroke-dasharray="20, 100" stroke-dashoffset="-70" stroke-linecap="round" stroke-width="3.5"></circle>
+<circle cx="18" cy="18" fill="none" r="15.9155" stroke="#C8E6C9" stroke-dasharray="10, 100" stroke-dashoffset="-90" stroke-linecap="round" stroke-width="3.5"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-[20px] font-black text-white">100<span class="text-[10px] font-bold">%</span></span>
+</div>
+</div>
+<div class="flex-1 space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-2.5 h-2.5 rounded-full bg-nature-500 shadow-[0_0_10px_rgba(76,175,80,0.6)]"></div>
+<span class="text-xs text-white/80">纯净水</span>
+</div>
+<span class="text-xs font-bold">70%</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-2.5 h-2.5 rounded-full bg-nature-400"></div>
+<span class="text-xs text-white/80">茶与咖啡</span>
+</div>
+<span class="text-xs font-bold">20%</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-2.5 h-2.5 rounded-full bg-nature-200"></div>
+<span class="text-xs text-white/80">天然果汁</span>
+</div>
+<span class="text-xs font-bold">10%</span>
+</div>
+</div>
+</div>
+</section>
+<section class="ultra-glass rounded-3xl p-6 relative overflow-hidden">
+<div class="absolute -right-4 -top-4 w-24 h-24 bg-nature-400/10 blur-3xl rounded-full"></div>
+<div class="flex items-center gap-2 mb-3">
+<span class="material-symbols-outlined text-nature-400 text-xl">storm</span>
+<h3 class="text-sm font-bold tracking-widest text-nature-200">森林寄语</h3>
+</div>
+<p class="text-[13px] leading-relaxed text-white/90 font-light">
+                    您的身体正如森林中的幼苗，水分是成长的关键。本周您的饮水稳定性提升了 <span class="text-nature-400 font-bold">15%</span>，继续保持，让生命力如绿荫般繁茂。
+                </p>
+<div class="mt-4 pt-4 border-t border-white/10 flex justify-between items-center">
+<span class="text-[10px] text-white/40 italic">—— 小苗 HydrateMate</span>
+<button class="text-[10px] font-bold text-nature-300 flex items-center gap-1">
+                        分享成果 <span class="material-symbols-outlined text-[12px]">share</span>
+</button>
+</div>
+</section>
+</main>
+<div class="pb-6 pt-2 flex justify-center">
+<div class="w-32 h-1 ultra-glass rounded-full opacity-40"></div>
+</div>
+</div>
+
+</body></html>

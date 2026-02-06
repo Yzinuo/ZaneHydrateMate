@@ -1,0 +1,14 @@
+server:
+  port: 8080
+  mode: debug
+
+database:
+  dsn: "host=localhost user=postgres password=postgres dbname=hydratemate port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+
+jwt:
+  secret: "your-256-bit-secret"
+  access_ttl: 15m
+  refresh_ttl: 168h
+
+reminder:
+  default_intensity: 5

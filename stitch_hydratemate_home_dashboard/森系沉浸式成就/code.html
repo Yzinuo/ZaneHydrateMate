@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-Hans"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>森系沉浸式成就 - HydrateMate</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#2E7D32", // Nature Green
+              "primary-light": "#4CAF50",
+              "primary-dark": "#1B5E20",
+              "background-light": "#F1F8E9", // Very light green tint
+              "background-dark": "#0A1F0D", // Deep forest dark
+              "glass-light": "rgba(255, 255, 255, 0.7)",
+              "glass-dark": "rgba(20, 40, 20, 0.6)",
+            },
+            fontFamily: {
+              display: ['"Noto Sans SC"', 'sans-serif'],
+            },
+            borderRadius: {
+              DEFAULT: "1rem",
+              "xl": "1.5rem",
+              "2xl": "2rem",
+            },
+            backgroundImage: {
+                'forest-gradient': "linear-gradient(to bottom right, #4CAF50, #2E7D32)",
+            }
+          },
+        },
+      };
+    </script>
+<style>body {
+    font-family: "Noto Sans SC", sans-serif;background-image: url(https://lh3.googleusercontent.com/aida-public/AB6AXuCkTmEsxyB7_HfylzeLHeArDi8GD5aCutG-kKGpgQGv5NVi7yMIvCmrwXKN_1MMmaW9rlcW5WHiTf8Z9pUKj456ALAm4A7_7bgNCroyT8kwOhihXeSKkRJDYNz8UmPhpltrlVtyvr7_NetXjh3QG_Q2Hu8i0RCig_77Kd8kWbLRBrVDM4Oivfi9YN9azpX4D1C1pNeGU72oIKIK8FQsRR-ZpwoOCkI76MkZs-jE0cCX9Orx_4ZCzv6qxzZ_NIXpRgRJMfXp7YKgdzmf);
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed
+    }.dark body {
+    background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url(https://lh3.googleusercontent.com/aida-public/AB6AXuDiFr_kJGTBvCnu8N_8WhXfpHHTp7F9S_w_dXZwUV5oUaD3Snfa_jTWMQJEK4SylMmt6nJply0cWmsfwgONSreia_5A-Rqcb1sg8HIhLE93UkHd2q9Ypw-Qw_dMABziO-uBa5qsxhrPxQ973qWoalMonxJASsjVO3koRCaGpRrxnEynG_oE2jq-G0AGYAwo98JHYzSLpbIPus8pDa9_X6gIyEi5D8RZNVujK5O22igsG7lRW0NnevXkyxX4hBzeA01EyDEnTip4EHuT)
+    }
+.glass-panel {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1)
+    }
+.dark .glass-panel {
+    border: 1px solid rgba(255, 255, 255, 0.1)
+    }
+.glow-green {
+    box-shadow: 0 0 15px rgba(76, 175, 80, 0.4)
+    }
+.shine-btn {
+    position: relative;
+    overflow: hidden
+    }
+.shine-btn::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: 0.5s
+    }
+.shine-btn:active::after {
+    left: 100%;
+    transition: 0s
+    }</style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-100 min-h-screen">
+<div class="max-w-md mx-auto min-h-screen relative overflow-hidden flex flex-col">
+<header class="flex justify-between items-center px-6 py-5 z-10">
+<button class="text-gray-800 dark:text-white p-2 rounded-full glass-panel bg-glass-light dark:bg-glass-dark">
+<span class="material-icons-round text-2xl">arrow_back</span>
+</button>
+<h1 class="text-xl font-bold text-gray-900 dark:text-white drop-shadow-sm">成就</h1>
+<button class="text-gray-800 dark:text-white p-2 rounded-full glass-panel bg-glass-light dark:bg-glass-dark">
+<span class="material-icons-round text-2xl">help_outline</span>
+</button>
+</header>
+<main class="flex-1 px-5 pb-8 overflow-y-auto z-10 scrollbar-hide">
+<div class="glass-panel bg-glass-light/90 dark:bg-glass-dark/80 rounded-3xl p-6 mb-6 text-center relative overflow-hidden">
+<div class="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-green-100/50 to-transparent dark:from-green-900/30 opacity-60"></div>
+<div class="relative mx-auto mb-4 w-24 h-24 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center shadow-lg border-4 border-green-100 dark:border-green-900/50">
+<div class="absolute -top-3 px-3 py-1 bg-green-100 dark:bg-green-900 rounded-full text-xs font-bold text-primary dark:text-green-300 shadow-sm border border-green-200 dark:border-green-800">
+                        最新解锁
+                    </div>
+<span class="text-5xl drop-shadow-md">🌷</span> 
+</div>
+<h2 class="text-2xl font-bold text-green-800 dark:text-green-100 mb-2">今日目标已达成！</h2>
+<p class="text-gray-600 dark:text-gray-300 text-sm mb-6 font-medium">
+                    你今天喝了 2,000ml。继续保持！
+                </p>
+<button class="shine-btn w-full py-4 bg-primary hover:bg-primary-dark text-white font-bold rounded-2xl shadow-lg transform transition active:scale-95 flex items-center justify-center gap-2">
+<span class="material-icons-round text-sm">stars</span>
+                    领取奖励
+                </button>
+</div>
+<div class="glass-panel bg-white/80 dark:bg-gray-800/60 rounded-2xl p-4 mb-8 flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center text-primary">
+<span class="material-icons-round text-2xl">eco</span>
+</div>
+<div>
+<div class="font-bold text-lg text-gray-800 dark:text-white">5天连续</div>
+<div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                            你真棒！🌱
+                        </div>
+</div>
+</div>
+<button class="text-primary dark:text-green-400 font-bold text-sm px-3 py-1 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors">
+                    查看统计
+                </button>
+</div>
+<div class="mb-4 flex justify-between items-end">
+<h3 class="font-bold text-lg text-gray-900 dark:text-white drop-shadow-sm">徽章收藏</h3>
+<span class="text-sm font-semibold text-primary dark:text-green-400 bg-white/50 dark:bg-black/30 px-2 py-0.5 rounded-md">3 / 12 已解锁</span>
+</div>
+<div class="grid grid-cols-3 gap-y-8 gap-x-4">
+<div class="flex flex-col items-center group">
+<div class="w-20 h-20 rounded-full glass-panel bg-white dark:bg-gray-800 border-2 border-primary dark:border-green-500 flex items-center justify-center mb-2 glow-green transition-transform group-hover:-translate-y-1">
+<span class="material-icons-round text-3xl text-primary dark:text-green-400">wb_sunny</span>
+</div>
+<span class="text-xs font-bold text-gray-800 dark:text-gray-200">早起鸟</span>
+</div>
+<div class="flex flex-col items-center group">
+<div class="w-20 h-20 rounded-full glass-panel bg-white dark:bg-gray-800 border-2 border-primary dark:border-green-500 flex items-center justify-center mb-2 glow-green transition-transform group-hover:-translate-y-1">
+<span class="material-icons-round text-3xl text-primary dark:text-green-400">water_drop</span>
+</div>
+<span class="text-xs font-bold text-gray-800 dark:text-gray-200">倒水大师</span>
+</div>
+<div class="flex flex-col items-center group">
+<div class="w-20 h-20 rounded-full glass-panel bg-white dark:bg-gray-800 border-2 border-primary dark:border-green-500 flex items-center justify-center mb-2 glow-green transition-transform group-hover:-translate-y-1">
+<span class="material-icons-round text-3xl text-primary dark:text-green-400">shield</span>
+</div>
+<span class="text-xs font-bold text-gray-800 dark:text-gray-200">补水英雄</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-20 h-20 rounded-full glass-panel bg-gray-200/50 dark:bg-gray-700/30 border border-transparent flex items-center justify-center mb-2 grayscale opacity-70">
+<span class="material-icons-round text-3xl text-gray-400 dark:text-gray-500">directions_run</span>
+</div>
+<span class="text-xs text-gray-500 dark:text-gray-400">马拉松</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-20 h-20 rounded-full glass-panel bg-gray-200/50 dark:bg-gray-700/30 border border-transparent flex items-center justify-center mb-2 grayscale opacity-70">
+<span class="material-icons-round text-3xl text-gray-400 dark:text-gray-500">scuba_diving</span>
+</div>
+<span class="text-xs text-gray-500 dark:text-gray-400">深潜</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-20 h-20 rounded-full glass-panel bg-gray-200/50 dark:bg-gray-700/30 border border-transparent flex items-center justify-center mb-2 grayscale opacity-70">
+<span class="material-icons-round text-3xl text-gray-400 dark:text-gray-500">waves</span>
+</div>
+<span class="text-xs text-gray-500 dark:text-gray-400">海洋</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-20 h-20 rounded-full glass-panel bg-gray-200/50 dark:bg-gray-700/30 border border-transparent flex items-center justify-center mb-2 grayscale opacity-70">
+<span class="material-icons-round text-3xl text-gray-400 dark:text-gray-500">calendar_month</span>
+</div>
+<span class="text-xs text-gray-500 dark:text-gray-400">30天</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-20 h-20 rounded-full glass-panel bg-gray-200/50 dark:bg-gray-700/30 border border-transparent flex items-center justify-center mb-2 grayscale opacity-70">
+<span class="material-icons-round text-3xl text-gray-400 dark:text-gray-500">groups</span>
+</div>
+<span class="text-xs text-gray-500 dark:text-gray-400">社交达人</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-20 h-20 rounded-full glass-panel bg-gray-200/30 dark:bg-gray-700/20 border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center mb-2">
+<span class="material-icons-round text-3xl text-gray-300 dark:text-gray-600">lock</span>
+</div>
+<span class="text-xs text-gray-400 dark:text-gray-500">???</span>
+</div>
+</div>
+<div class="h-10"></div>
+</main>
+<div class="fixed bottom-0 right-0 pointer-events-none opacity-40 dark:opacity-20 z-0">
+<img alt="leaf overlay" class="w-48 h-auto mask-image-fade transform translate-y-10 translate-x-10 rotate-12 filter brightness-125 sepia-0 hue-rotate-30" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBb8G9SwS8Y7b8y-TZnY8xBfvRhmHRP8yaVV0hti-hTiV5Qf2DKS9IKJagay9p-ngIscunfWo22lhxHupQoUPAxcKjdAhh66saL1QocvZ0Di5Qi9mUlkyD77hbuiypQEfGNmbpoygjKsGvh4jOMBUDxDrOYZoxF9MI1M5Y8xYN9OHETau99SdpuyxjnY8GiaaLRKQRH8gKRTwtkVhNShtz9naYKXRe6aU48CX5zJNoXA1bCWgy7oU_apNSQRcRI2yCjZbo9KGxgX_FN"/>
+</div>
+</div>
+
+</body></html>

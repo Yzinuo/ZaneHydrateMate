@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>森系沉浸式目标设置</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    "nature-green": "#1b5e20", 
+                    "vibrant-green": "#22c55e",
+                },
+                fontFamily: {
+                    sans: ["'Noto Sans SC'", "sans-serif"],
+                },
+                backgroundImage: {
+                    'forest-bg': "url('https://images.unsplash.com/photo-1448375240586-dfd8d395ea6c?q=80&w=2940&auto=format&fit=crop')",
+                }
+            },
+        },
+    };
+</script>
+<style>
+    body {min-height: 100vh;
+        min-height: 100dvh;
+    }
+    .glass-card {
+        background: linear-gradient(145deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.3) 100%);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        box-shadow: 0 8px 32px 0 rgba(0, 20, 10, 0.3);
+    }
+    .glow-effect {
+        background: radial-gradient(closest-side, rgba(255, 255, 220, 0.5) 0%, rgba(255, 255, 255, 0) 100%);
+        filter: blur(25px);
+    }
+    .m3-btn {
+        background-color: #22c55e;
+        box-shadow: 0 4px 8px 3px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.3);transition: all 0.2s cubic-bezier(0.2, 0.0, 0, 1.0);
+    }
+    .m3-btn:active {
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
+        transform: scale(0.98);
+    }
+</style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-forest-bg bg-cover bg-center text-gray-800 font-sans antialiased relative overflow-hidden selection:bg-green-200">
+<div class="absolute inset-0 bg-gradient-to-b from-black/50 via-[#0a2f15]/60 to-[#051f0e]/80 backdrop-blur-[2px]"></div>
+<div class="relative z-10 flex flex-col h-full px-6 py-6 mx-auto max-w-md min-h-[100dvh]">
+<header class="flex items-center justify-between mb-4 text-white">
+<button class="p-2 rounded-full hover:bg-white/10 transition-colors active:bg-white/20">
+<span class="material-symbols-outlined text-[28px]">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold tracking-wide text-shadow">目标设定</h1>
+<div class="w-10"></div> 
+</header>
+<main class="flex-grow flex flex-col justify-center py-4">
+<div class="glass-card rounded-[2.5rem] p-8 flex flex-col items-center text-center relative overflow-hidden transition-all duration-500">
+<div class="absolute -top-1/2 left-1/2 -translate-x-1/2 w-full h-full bg-gradient-to-b from-white/40 to-transparent pointer-events-none rounded-t-[2.5rem]"></div>
+<div class="relative mb-6 mt-2 w-full flex justify-center">
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 glow-effect"></div>
+<img alt="lush green potted plant flourishing" class="w-48 h-auto relative z-10 drop-shadow-xl object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBnguUDpSxyQoCwPMYrwCv3wq6IlIctsuB_pwfs-w5ezmmWMrobB-TO1RNx07_YoUOo5ChI2p334TJOq_GoiSqHusT22nGR2oJVzeT1QYaVp_G3Q27BA9NzCiNqYdcAI_oCrbKhsg9HWoOg8G34ajBEclFZYpxKYyqFi-rKPemCYLQwv6AkA6n5ffYlNLv6YZqiBTgIQm82RDtpawpwN4pDx3iMmhYfVW0IGSgCEqYztw08cjG3CADSPe3SqGfApwwmZk_cxX9toAGj"/>
+</div>
+<div class="space-y-1 relative z-10 w-full">
+<p class="text-[#2e7d32] font-medium text-sm tracking-wide opacity-90">根据您的身体数据</p>
+<div class="flex items-baseline justify-center gap-1.5 text-[#1b5e20] my-2 drop-shadow-sm">
+<span class="text-7xl font-black tracking-tight">2200</span>
+<span class="text-2xl font-bold opacity-75">ml</span>
+</div>
+<h2 class="text-xl font-bold text-[#1b5e20] mt-1">你的推荐目标</h2>
+<div class="flex justify-center mt-5">
+<div class="inline-flex items-center gap-1.5 px-5 py-2 bg-[#e8f5e9]/90 backdrop-blur-md text-[#1b5e20] rounded-full text-sm font-bold shadow-sm border border-[#c8e6c9]/50">
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+<span>每天</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<footer class="mt-auto pb-4 space-y-4">
+<button class="m3-btn w-full py-4 rounded-full flex items-center justify-center gap-2 text-white font-bold text-lg group relative overflow-hidden">
+<span class="relative z-10">确认目标</span>
+<span class="material-symbols-outlined relative z-10 group-hover:translate-x-1 transition-transform">check</span>
+<div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+</button>
+<button class="w-full py-2 text-white/80 hover:text-white transition-colors flex items-center justify-center gap-1 font-medium text-sm active:opacity-70">
+<span>手动调整</span>
+<span class="material-symbols-outlined text-[16px]">edit</span>
+</button>
+</footer>
+</div>
+
+</body></html>
