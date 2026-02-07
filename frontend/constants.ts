@@ -1,6 +1,14 @@
+/*
+ * @Author: yangzinuo yangzinuo@caohua.com
+ * @Date: 2026-02-06 17:51:35
+ * @LastEditors: yangzinuo yangzinuo@caohua.com
+ * @LastEditTime: 2026-02-07 11:57:30
+ * @FilePath: \ZaneHydrateMate\frontend\constants.ts
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 
 export const IMAGES = {
-    BACKGROUND: "/img/森林背景.png",
+    BACKGROUND: "/img/背景2.png",
     PLANT_STAGES: [
         "https://lh3.googleusercontent.com/aida-public/AB6AXuAYF_kG5xY6Q3Z_9_S1-m0_W4V4W1-W-1-W1W1W1W1W1W1W1W1W1W1W1W1W", // Seed (Simulated/Approx)
         "https://lh3.googleusercontent.com/aida-public/AB6AXuB_S1-m0_W4V4W1-W-1-W1W1W1W1W1W1W1W1W1W1W1W1W", // Tree (Actual from prompt)

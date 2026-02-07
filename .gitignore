@@ -1,1 +1,34 @@
 .ace-tool/
+
+# build artifacts
+/dist/
+/build/
+/out/
+/bin/
+/obj/
+
+# node
+node_modules/
+*.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# misc
+*.tmp
+*.cache
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
