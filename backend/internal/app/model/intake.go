@@ -8,7 +8,7 @@ import (
 )
 
 type WaterIntake struct {
-	ID         uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ID         uuid.UUID `gorm:"type:uuid;primary_key"`
 	UserID     uuid.UUID `gorm:"type:uuid;not null;index:idx_intakes_user_time"`
 	AmountMl   int       `gorm:"not null"`
 	Category   string    `gorm:"type:varchar(20);default:'water'"`

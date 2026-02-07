@@ -19,14 +19,14 @@ const App: React.FC = () => {
         records: []
     });
 
-    const addWater = (amount: number) => {
+    const addWater = (amount: number, category: string = 'water') => {
         setUser(prev => ({
             ...prev,
             currentIntake: prev.currentIntake + amount,
             totalIntake: prev.totalIntake + amount,
             records: [
                 ...prev.records,
-                { id: Math.random().toString(), amount, type: 'water', timestamp: Date.now() }
+                { id: Math.random().toString(), amount, type: category, timestamp: Date.now() }
             ]
         }));
     };
