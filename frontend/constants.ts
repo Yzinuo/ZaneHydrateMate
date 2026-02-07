@@ -1,6 +1,6 @@
 
 export const IMAGES = {
-    BACKGROUND: "https://lh3.googleusercontent.com/aida-public/AB6AXuCkTmEsxyB7_HfylzeLHeArDi8GD5aCutG-kKGpgQGv5NVi7yMIvCmrwXKN_1MMmaW9rlcW5WHiTf8Z9pUKj456ALAm4A7_7bgNCroyT8kwOhihXeSKkRJDYNz8UmPhpltrlVtyvr7_NetXjh3QG_Q2Hu8i0RCig_77Kd8kWbLRBrVDM4Oivfi9YN9azpX4D1C1pNeGU72oIKIK8FQsRR-ZpwoOCkI76MkZs-jE0cCX9Orx_4ZCzv6qxzZ_NIXpRgRJMfXp7YKgdzmf",
+    BACKGROUND: "/img/森林背景.png",
     PLANT_STAGES: [
         "https://lh3.googleusercontent.com/aida-public/AB6AXuAYF_kG5xY6Q3Z_9_S1-m0_W4V4W1-W-1-W1W1W1W1W1W1W1W1W1W1W1W1W", // Seed (Simulated/Approx)
         "https://lh3.googleusercontent.com/aida-public/AB6AXuB_S1-m0_W4V4W1-W-1-W1W1W1W1W1W1W1W1W1W1W1W1W", // Tree (Actual from prompt)

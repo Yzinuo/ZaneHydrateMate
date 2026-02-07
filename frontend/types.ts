@@ -4,7 +4,15 @@ export enum Page {
     STATS = 'STATS',
     ACHIEVEMENTS = 'ACHIEVEMENTS',
     SETTINGS = 'SETTINGS',
-    GOAL_SETTING = 'GOAL_SETTING'
+    GOAL_SETTING = 'GOAL_SETTING',
+    PROFILE = 'PROFILE'
+}
+
+export interface UserProfile {
+    age: number;
+    weightKg: number;
+    heightCm: number;
+    activityLevel: 'sedentary' | 'moderate' | 'active';
 }
 
 export interface DrinkRecord {
@@ -22,6 +30,8 @@ export interface Badge {
 }
 
 export interface UserState {
+    id?: string;
+    profile?: UserProfile;
     dailyGoal: number;
     currentIntake: number;
     streak: number;

@@ -52,3 +52,27 @@ func (m *Manager) generateToken(userID uuid.UUID, email, tokenType string, ttl t
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(secret)
 }
+
+func (m *Manager) ValidateAccessToken(tokenString string) (*Claims, error) {
+	return m.validateToken(tokenString, m.AccessSecret)
+}
+
+func (m *Manager) ValidateRefreshToken(tokenString string) (*Claims, error) {
+	return m.validateToken(tokenString, m.RefreshSecret)
+}
+
+func (m *Manager) validateToken(tokenString string, secret []byte) (*Claims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		return secret, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	claims, ok := token.Claims.(*Claims)
+	if !ok || !token.Valid {
+		return nil, jwt.ErrSignatureInvalid
+	}
+
+	return claims, nil
+}

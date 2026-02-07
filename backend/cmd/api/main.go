@@ -4,7 +4,7 @@
  * @LastEditors: yangzinuo yangzinuo@caohua.com
  * @LastEditTime: 2026-02-05 16:02:13
  * @FilePath: \ZaneHydrateMate\backend\cmd\api\main.go
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ * @Description: HydrateMate API Server
  */
 package main
 
@@ -12,6 +12,7 @@ import (
 	"log"
 
 	"hydratemate/internal/app/handler"
+	"hydratemate/internal/app/middleware"
 	"hydratemate/internal/app/model"
 	"hydratemate/internal/app/repo"
 	"hydratemate/internal/app/service"
@@ -43,18 +44,38 @@ func main() {
 	}
 
 	// Auto Migrate (Dev only)
-	db.AutoMigrate(&model.User{}, &model.UserSettings{}, &model.WaterIntake{})
+	db.AutoMigrate(
+		&model.User{},
+		&model.UserSettings{},
+		&model.WaterIntake{},
+		&model.UserProfile{},
+		&model.DailyStats{},
+	)
 
 	// 3. Init Layers
-	// Repo
-	userRepo := repo.NewUserRepository(db)
-
-	// Service
+	// Token Manager
 	tokenManager := jwtutil.NewManager(jwtSecret, jwtSecret, 15*time.Minute, 168*time.Hour)
-	authService := service.NewAuthService(userRepo, tokenManager)
 
-	// Handler
+	// Repositories
+	userRepo := repo.NewUserRepository(db)
+	intakeRepo := repo.NewIntakeRepository(db)
+	profileRepo := repo.NewProfileRepository(db)
+	statsRepo := repo.NewStatsRepository(db)
+	settingsRepo := repo.NewSettingsRepository(db)
+
+	// Services
+	authService := service.NewAuthService(userRepo, tokenManager)
+	intakeService := service.NewIntakeService(db, intakeRepo, settingsRepo)
+	profileService := service.NewProfileService(profileRepo, settingsRepo)
+	statsService := service.NewStatsService(statsRepo)
+	settingsService := service.NewSettingsService(settingsRepo)
+
+	// Handlers
 	authHandler := handler.NewAuthHandler(authService)
+	intakeHandler := handler.NewIntakeHandler(intakeService)
+	profileHandler := handler.NewProfileHandler(profileService)
+	statsHandler := handler.NewStatsHandler(statsService)
+	settingsHandler := handler.NewSettingsHandler(settingsService)
 
 	// 4. Init Router
 	r := gin.Default()
@@ -74,10 +95,40 @@ func main() {
 
 	api := r.Group("/api/v1")
 	{
+		// Auth routes (public)
 		auth := api.Group("/auth")
 		{
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
+		}
+
+		// Protected routes
+		protected := api.Group("")
+		protected.Use(middleware.AuthMiddleware(tokenManager))
+		{
+			// Intake routes
+			intakes := protected.Group("/intakes")
+			{
+				intakes.POST("", intakeHandler.AddIntake)
+				intakes.GET("", intakeHandler.ListIntakes)
+				intakes.DELETE("/:id", intakeHandler.DeleteIntake)
+			}
+
+			// Stats routes
+			stats := protected.Group("/stats")
+			{
+				stats.GET("/weekly", statsHandler.GetWeeklyStats)
+				stats.GET("/monthly", statsHandler.GetMonthlyStats)
+				stats.GET("/today", statsHandler.GetTodayStats)
+			}
+
+			// Profile routes
+			protected.GET("/profile", profileHandler.GetProfile)
+			protected.PUT("/profile", profileHandler.UpdateProfile)
+
+			// Settings routes
+			protected.GET("/settings", settingsHandler.GetSettings)
+			protected.PUT("/settings", settingsHandler.UpdateSettings)
 		}
 	}
 
