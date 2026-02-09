@@ -1,3 +1,4 @@
+import React from 'react';
 
 export enum Page {
     HOME = 'HOME',
@@ -5,7 +6,39 @@ export enum Page {
     ACHIEVEMENTS = 'ACHIEVEMENTS',
     SETTINGS = 'SETTINGS',
     GOAL_SETTING = 'GOAL_SETTING',
-    PROFILE = 'PROFILE'
+    PROFILE = 'PROFILE',
+    DRINK_SETTINGS = 'DRINK_SETTINGS',
+    REMINDER_SETTINGS = 'REMINDER_SETTINGS'
+}
+
+export type ReminderType = 'quick' | 'recurring' | 'scene';
+
+export interface ReminderConfig {
+    id: string;
+    type: ReminderType;
+    label: string;
+    time?: string;      // HH:mm for scene
+    interval?: number;  // Hours for recurring
+    enabled: boolean;
+}
+
+export interface DoNotDisturbConfig {
+    enabled: boolean;
+    start: string; // HH:mm
+    end: string;   // HH:mm
+}
+
+export type DrinkCategory = 'water' | 'tea' | 'juice' | 'milk' | 'coffee' | 'alcohol' | 'soda';
+
+export interface DrinkOption {
+    id: string;
+    label: string;
+    amount: number;
+    category: string;
+    icon?: React.ReactNode; // Optional, can be derived from iconId
+    iconId?: string;       // For serialization/storage
+    colorClass?: string;   // For styling (Tailwind classes)
+    color?: string;        // Legacy support
 }
 
 export interface UserProfile {

@@ -1,23 +1,32 @@
-
 import React, { useState, useEffect } from 'react';
-import { Page, UserState, UserProfile } from './types';
+import { Page, UserState, UserProfile, DrinkOption } from './types';
 import { IMAGES } from './constants';
 import { Home } from './pages/Home';
+import { HomeModern } from './pages/HomeModern';
 import { Stats } from './pages/Stats';
-import { Achievements } from './pages/Achievements';
 import { GoalSetting } from './pages/GoalSetting';
 import { Profile } from './pages/Profile';
-import { Home as HomeIcon, BarChart2, Award, User, Plus } from 'lucide-react';
+import { DrinkSettings } from './pages/DrinkSettings';
+import { ReminderSettings } from './pages/ReminderSettings';
+import { Home as HomeIcon, BarChart2, User, Plus, Palette, Bell } from 'lucide-react';
+
+const DEFAULT_DRINKS: DrinkOption[] = [
+    { id: '1', label: '一杯水', amount: 250, category: 'water', iconId: 'droplet', colorClass: 'bg-[#e0f7fa] text-[#00bcd4]' },
+    { id: '2', label: '一小口', amount: 50, category: 'water', iconId: 'droplet', colorClass: 'bg-blue-50 text-blue-400' },
+    { id: '3', label: '咖啡', amount: 150, category: 'coffee', iconId: 'coffee', colorClass: 'bg-[#fff3e0] text-[#ff9800]' },
+    { id: '4', label: '果汁', amount: 300, category: 'juice', iconId: 'wine', colorClass: 'bg-[#fce4ec] text-[#e91e63]' },
+];
 
 const App: React.FC = () => {
     const [currentPage, setCurrentPage] = useState<Page>(Page.HOME);
     const [user, setUser] = useState<UserState>({
         dailyGoal: 2000,
-        currentIntake: 1250,
+        currentIntake: 0,
         streak: 5,
         totalIntake: 14500,
         records: []
     });
+    const [drinkOptions, setDrinkOptions] = useState<DrinkOption[]>(DEFAULT_DRINKS);
 
     const addWater = (amount: number, category: string = 'water') => {
         setUser(prev => ({
@@ -44,47 +53,48 @@ const App: React.FC = () => {
     const renderPage = () => {
         switch (currentPage) {
             case Page.HOME:
-                return <Home user={user} onAddWater={addWater} />;
+                return <HomeModern 
+                    user={user} 
+                    drinkOptions={drinkOptions}
+                    onAddWater={addWater} 
+                    onOpenSettings={() => setCurrentPage(Page.DRINK_SETTINGS)}
+                />;
             case Page.STATS:
                 return <Stats user={user} onBack={() => setCurrentPage(Page.HOME)} />;
-            case Page.ACHIEVEMENTS:
-                return <Achievements onBack={() => setCurrentPage(Page.HOME)} />;
             case Page.GOAL_SETTING:
                 return <GoalSetting onConfirm={confirmGoal} onBack={() => setCurrentPage(Page.HOME)} />;
             case Page.PROFILE:
                 return <Profile initial={user.profile} onSave={handleSaveProfile} onBack={() => setCurrentPage(Page.HOME)} />;
+            case Page.DRINK_SETTINGS:
+                return <DrinkSettings 
+                    options={drinkOptions} 
+                    onUpdateOptions={setDrinkOptions} 
+                    onBack={() => setCurrentPage(Page.HOME)} 
+                />;
+            case Page.REMINDER_SETTINGS:
+                return <ReminderSettings onBack={() => setCurrentPage(Page.HOME)} />;
             default:
-                return <Home user={user} onAddWater={addWater} />;
+                return <HomeModern 
+                    user={user} 
+                    drinkOptions={drinkOptions}
+                    onAddWater={addWater} 
+                    onOpenSettings={() => setCurrentPage(Page.DRINK_SETTINGS)}
+                />;
         }
     };
 
     return (
-        <div className="relative max-w-md mx-auto h-screen w-full bg-transparent overflow-hidden flex flex-col shadow-2xl">
-            {/* Immersive Forest Background */}
-            <div className="absolute inset-0 z-0">
-                <img
-                    src={IMAGES.BACKGROUND}
-                    className="w-full h-full object-cover"
-                    alt="Forest Background"
-                />
-                {/* 雾气渐变遮罩 - 匹配设计稿冷灰绿色调 */}
-                <div className="absolute inset-0 bg-gradient-to-b from-[#2a3a2e]/30 via-transparent to-[#1a2a1e]/60"></div>
-            </div>
-
-            {/* Foreground Leaf Overlay (Floating effect) */}
-            <div className="absolute bottom-[-10%] right-[-10%] w-64 h-64 z-0 opacity-20 pointer-events-none transform rotate-45">
-                <img src={IMAGES.LEAF_OVERLAY} className="w-full h-full object-contain" alt="Leaf overlay" />
-            </div>
+        <div className="relative w-full h-screen bg-[#fbffff] overflow-hidden flex flex-col shadow-2xl">
 
             {/* Page Content */}
             <div className="relative z-10 flex-1 overflow-hidden">
                 {renderPage()}
             </div>
 
-            {/* Navigation (Only show on certain pages) */}
-            {[Page.HOME, Page.STATS, Page.ACHIEVEMENTS, Page.PROFILE].includes(currentPage) && (
+            {/* Navigation */}
+            {[Page.HOME, Page.STATS, Page.PROFILE, Page.REMINDER_SETTINGS].includes(currentPage) && (
                 <div className="relative z-20 px-6 pb-8">
-                    <div className="backdrop-blur-xl bg-white/5 border border-white/15 rounded-3xl h-16 flex items-center justify-around px-4">
+                    <div className="backdrop-blur-xl border border-gray-100 bg-white/80 rounded-3xl h-16 flex items-center justify-around px-4 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.1)]">
                         <NavButton
                             active={currentPage === Page.HOME}
                             onClick={() => setCurrentPage(Page.HOME)}
@@ -97,21 +107,14 @@ const App: React.FC = () => {
                             icon={<BarChart2 />}
                             label="统计"
                         />
-                        {/* Center Add Button */}
-                        <div className="relative -top-6">
-                            <button
-                                onClick={() => setCurrentPage(Page.GOAL_SETTING)}
-                                className="w-14 h-14 bg-green-500 rounded-full flex items-center justify-center text-white shadow-[0_8px_20px_rgba(34,197,94,0.4)] border-4 border-[#0a1f0d] active:scale-90 transition-transform"
-                            >
-                                <Plus className="w-8 h-8" />
-                            </button>
-                        </div>
+                        {/* Center Add Button -> Reminders Shortcut */}
                         <NavButton
-                            active={currentPage === Page.ACHIEVEMENTS}
-                            onClick={() => setCurrentPage(Page.ACHIEVEMENTS)}
-                            icon={<Award />}
-                            label="花园"
+                            active={currentPage === Page.REMINDER_SETTINGS}
+                            onClick={() => setCurrentPage(Page.REMINDER_SETTINGS)}
+                            icon={<Bell />}
+                            label="提醒"
                         />
+                        
                         <NavButton
                             active={currentPage === Page.PROFILE}
                             onClick={() => setCurrentPage(Page.PROFILE)}
@@ -135,7 +138,11 @@ interface NavButtonProps {
 const NavButton: React.FC<NavButtonProps> = ({ active, onClick, icon, label }) => (
     <button 
         onClick={onClick}
-        className={`flex flex-col items-center gap-1 transition-all ${active ? 'text-green-400 scale-110' : 'text-white/40'}`}
+        className={`flex flex-col items-center gap-1 transition-all ${
+            active 
+            ? 'text-[#0dc792] scale-110' 
+            : 'text-gray-400'
+        }`}
     >
         {React.cloneElement(icon as React.ReactElement, { className: 'w-5 h-5' })}
         <span className="text-[10px] font-bold">{label}</span>
