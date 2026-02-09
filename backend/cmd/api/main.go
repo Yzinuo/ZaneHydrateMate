@@ -14,8 +14,10 @@ import (
 	"hydratemate/internal/app/handler"
 	"hydratemate/internal/app/middleware"
 	"hydratemate/internal/app/model"
+	"hydratemate/internal/app/reminder"
 	"hydratemate/internal/app/repo"
 	"hydratemate/internal/app/service"
+	"hydratemate/internal/app/websocket"
 	jwtutil "hydratemate/internal/pkg/jwt"
 
 	"time"
@@ -77,7 +79,16 @@ func main() {
 	statsHandler := handler.NewStatsHandler(statsService)
 	settingsHandler := handler.NewSettingsHandler(settingsService)
 
-	// 4. Init Router
+	// 4. Init WebSocket Hub & Reminder Scheduler
+	wsHub := websocket.NewHub()
+	go wsHub.Run()
+
+	reminderScheduler := reminder.NewScheduler(wsHub, settingsRepo, intakeRepo)
+	reminderScheduler.Start()
+
+	wsHandler := websocket.NewHandler(wsHub)
+
+	// 5. Init Router
 	r := gin.Default()
 
 	// CORS Middleware (Simplified)
@@ -102,6 +113,9 @@ func main() {
 			auth.POST("/login", authHandler.Login)
 		}
 
+		// WebSocket route (public, token in query param)
+		api.GET("/ws", wsHandler.ServeWS)
+
 		// Protected routes
 		protected := api.Group("")
 		protected.Use(middleware.AuthMiddleware(tokenManager))
@@ -120,6 +134,13 @@ func main() {
 				stats.GET("/weekly", statsHandler.GetWeeklyStats)
 				stats.GET("/monthly", statsHandler.GetMonthlyStats)
 				stats.GET("/today", statsHandler.GetTodayStats)
+				stats.GET("/hourly", statsHandler.GetHourlyStats)
+				stats.GET("/categories", statsHandler.GetCategoryStats)
+				stats.GET("/trends", statsHandler.GetTrendStats)
+				stats.GET("/streak", statsHandler.GetCurrentStreak)
+				stats.GET("/best-time", statsHandler.GetBestTime)
+				stats.GET("/gaps", statsHandler.GetGaps)
+				stats.GET("/health", statsHandler.GetHealthScore)
 			}
 
 			// Profile routes

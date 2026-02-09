@@ -31,3 +31,9 @@ type MonthlyStats struct {
 	GoalsMet   int          `json:"goals_met"`
 	DailyData  []DailyStats `json:"daily_data"`
 }
+
+type HourlyStats struct {
+	Hour      int `json:"hour"`      // 0-23
+	TotalMl   int `json:"total_ml"`  // Total volume consumed in this hour
+	Frequency int `json:"frequency"` // Number of times user drank in this hour
+}

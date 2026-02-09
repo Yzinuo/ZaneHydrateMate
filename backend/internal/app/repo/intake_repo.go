@@ -59,6 +59,15 @@ func (r *IntakeRepository) GetDailyTotal(userID uuid.UUID, date time.Time) (int,
 	return total, err
 }
 
+// GetByDateRange 获取日期范围内的饮水记录
+func (r *IntakeRepository) GetByDateRange(userID uuid.UUID, from, to time.Time) ([]model.WaterIntake, error) {
+	var intakes []model.WaterIntake
+	err := r.DB.Where("user_id = ? AND intake_time >= ? AND intake_time < ?", userID, from, to).
+		Order("intake_time DESC").
+		Find(&intakes).Error
+	return intakes, err
+}
+
 // UpsertDailyStats updates or inserts daily stats with the given delta
 func (r *IntakeRepository) UpsertDailyStats(userID uuid.UUID, statDate time.Time, deltaMl int, dailyGoal int) error {
 	date := time.Date(statDate.Year(), statDate.Month(), statDate.Day(), 0, 0, 0, 0, time.UTC)
@@ -69,11 +78,23 @@ func (r *IntakeRepository) UpsertDailyStats(userID uuid.UUID, statDate time.Time
 		TotalMl:  deltaMl,
 	}
 
-	return r.DB.Clauses(clause.OnConflict{
+	err := r.DB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "stat_date"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"total_ml":    gorm.Expr("daily_stats.total_ml + ?", deltaMl),
 			"is_goal_met": gorm.Expr("(daily_stats.total_ml + ?) >= ?", deltaMl, dailyGoal),
 		}),
 	}).Create(&stats).Error
+
+	if err != nil {
+		return err
+	}
+
+	// 异步重新计算从该日期开始的 streak
+	go func() {
+		statsRepo := NewStatsRepository(r.DB)
+		statsRepo.RecomputeStreaksFromDate(userID, date)
+	}()
+
+	return nil
 }
