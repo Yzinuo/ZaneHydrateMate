@@ -1,142 +1,215 @@
-/**
- * 本地通知服务 - Capacitor Local Notifications
- * 用于接收 WebSocket 提醒后触发系统通知
+﻿/**
+ * Notification bridge for websocket reminders.
  */
 
-import { wsClient, ReminderPayload } from './websocket';
+import { wsClient, ReminderPayload, WebSocketMessage } from './websocket';
 
-// Capacitor Local Notifications 类型定义
 interface LocalNotificationSchema {
-    title: string;
-    body: string;
-    id: number;
-    schedule?: { at: Date };
-    sound?: string;
-    attachments?: any[];
-    actionTypeId?: string;
-    extra?: any;
+  title: string;
+  body: string;
+  id: number;
+  sound?: string;
+  extra?: unknown;
 }
 
 interface LocalNotificationsPlugin {
-    schedule(options: { notifications: LocalNotificationSchema[] }): Promise<void>;
-    requestPermissions(): Promise<{ display: string }>;
-    checkPermissions(): Promise<{ display: string }>;
+  schedule(options: { notifications: LocalNotificationSchema[] }): Promise<void>;
+  requestPermissions(): Promise<{ display: string }>;
+  checkPermissions(): Promise<{ display: string }>;
 }
 
-// 动态导入 Capacitor（仅在移动端可用）
+export type NotificationPermissionState = NotificationPermission | 'unsupported';
+
+export interface ReminderServiceCallbacks {
+  onReminder?: (payload: ReminderPayload) => void;
+  onConnectionChange?: (connected: boolean) => void;
+  onConnectionEvent?: (message: WebSocketMessage) => void;
+}
+
 let LocalNotifications: LocalNotificationsPlugin | null = null;
+let localNotificationId = 1;
+let reminderCleanup: (() => void) | null = null;
 
-async function initCapacitor(): Promise<void> {
-    try {
-        const capacitor = await import('@capacitor/local-notifications');
-        LocalNotifications = capacitor.LocalNotifications as LocalNotificationsPlugin;
-    } catch (e) {
-        console.log('Capacitor not available (running in browser)');
-    }
+async function initCapacitorNotifications(): Promise<void> {
+  if (LocalNotifications) {
+    return;
+  }
+
+  try {
+    const moduleName = '@capacitor/local-notifications';
+    const capacitor = await import(/* @vite-ignore */ moduleName);
+    LocalNotifications = capacitor.LocalNotifications as LocalNotificationsPlugin;
+  } catch {
+    LocalNotifications = null;
+  }
 }
 
-// 通知 ID 计数器
-let notificationId = 1;
+export const getNotificationPermissionState = (): NotificationPermissionState => {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return 'unsupported';
+  }
 
-/**
- * 初始化通知服务
- */
+  return Notification.permission;
+};
+
+export async function ensureNotificationPermission(): Promise<NotificationPermissionState> {
+  await initCapacitorNotifications();
+
+  if (LocalNotifications) {
+    const current = await LocalNotifications.checkPermissions();
+    if (current.display === 'granted') {
+      return 'granted';
+    }
+
+    const requested = await LocalNotifications.requestPermissions();
+    return requested.display === 'granted' ? 'granted' : 'denied';
+  }
+
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return 'unsupported';
+  }
+
+  if (Notification.permission === 'granted' || Notification.permission === 'denied') {
+    return Notification.permission;
+  }
+
+  return Notification.requestPermission();
+}
+
 export async function initNotifications(): Promise<boolean> {
-    await initCapacitor();
+  const permission = await ensureNotificationPermission();
+  return permission === 'granted';
+}
 
-    if (!LocalNotifications) {
-        console.log('Local notifications not available');
-        return false;
-    }
+export async function showNotification(title: string, body: string, extra?: unknown): Promise<boolean> {
+  await initCapacitorNotifications();
 
-    try {
-        const permission = await LocalNotifications.checkPermissions();
-
-        if (permission.display !== 'granted') {
-            const result = await LocalNotifications.requestPermissions();
-            if (result.display !== 'granted') {
-                console.log('Notification permission denied');
-                return false;
-            }
+  if (LocalNotifications) {
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: localNotificationId++,
+          title,
+          body,
+          sound: 'default',
+          extra
         }
+      ]
+    });
+    return true;
+  }
 
-        console.log('Notification permission granted');
-        return true;
-    } catch (error) {
-        console.error('Failed to init notifications:', error);
-        return false;
+  const permission = getNotificationPermissionState();
+  if (permission === 'unsupported') {
+    return false;
+  }
+
+  if (permission !== 'granted') {
+    const requested = await ensureNotificationPermission();
+    if (requested !== 'granted') {
+      return false;
     }
+  }
+
+  new Notification(title, { body, icon: '/img/1阶段.png' });
+  return true;
 }
 
-/**
- * 显示本地通知
- */
-export async function showNotification(title: string, body: string, extra?: any): Promise<void> {
-    if (LocalNotifications) {
-        // Capacitor 环境 - 使用系统通知
-        await LocalNotifications.schedule({
-            notifications: [{
-                title,
-                body,
-                id: notificationId++,
-                sound: 'default',
-                extra
-            }]
-        });
-    } else {
-        // 浏览器环境 - 使用 Web Notification API
-        if ('Notification' in window) {
-            if (Notification.permission === 'granted') {
-                new Notification(title, { body, icon: '/img/1阶段.png' });
-            } else if (Notification.permission !== 'denied') {
-                const permission = await Notification.requestPermission();
-                if (permission === 'granted') {
-                    new Notification(title, { body, icon: '/img/1阶段.png' });
-                }
-            }
-        }
+function isReminderPayload(value: unknown): value is ReminderPayload {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const payload = value as Partial<ReminderPayload>;
+  return (
+    typeof payload.title === 'string' &&
+    typeof payload.body === 'string' &&
+    typeof payload.current_ml === 'number' &&
+    typeof payload.goal_ml === 'number' &&
+    typeof payload.timestamp === 'number'
+  );
+}
+
+export function connectReminderService(
+  token: string,
+  userId: string,
+  callbacks: ReminderServiceCallbacks = {}
+): () => void {
+  if (reminderCleanup) {
+    reminderCleanup();
+    reminderCleanup = null;
+  }
+
+  const handleReminder = async (message: WebSocketMessage) => {
+    if (!isReminderPayload(message.payload)) {
+      return;
     }
-}
 
-/**
- * 处理 WebSocket 提醒消息
- */
-function handleReminderMessage(payload: ReminderPayload): void {
-    showNotification(payload.title, payload.body, {
-        current_ml: payload.current_ml,
-        goal_ml: payload.goal_ml,
-        timestamp: payload.timestamp
-    });
-}
+    const payload = message.payload;
+    callbacks.onReminder?.(payload);
 
-/**
- * 连接 WebSocket 并监听提醒
- */
-export function connectReminderService(token: string, userId: string): void {
-    // 连接 WebSocket
-    wsClient.connect(token, userId);
-
-    // 监听提醒消息
-    wsClient.on('reminder', (message) => {
-        handleReminderMessage(message.payload as ReminderPayload);
+    await showNotification(payload.title, payload.body, {
+      current_ml: payload.current_ml,
+      goal_ml: payload.goal_ml,
+      timestamp: payload.timestamp
     });
 
-    // 监听连接成功
-    wsClient.on('connected', () => {
-        console.log('Reminder service connected');
-    });
-}
+    wsClient.ackReminder();
+  };
 
-/**
- * 断开提醒服务
- */
-export function disconnectReminderService(): void {
+  const handleConnected = (message: WebSocketMessage) => {
+    callbacks.onConnectionChange?.(true);
+    callbacks.onConnectionEvent?.(message);
+  };
+
+  const handleDisconnected = (message: WebSocketMessage) => {
+    callbacks.onConnectionChange?.(false);
+    callbacks.onConnectionEvent?.(message);
+  };
+
+  const handleReconnect = (message: WebSocketMessage) => {
+    callbacks.onConnectionChange?.(false);
+    callbacks.onConnectionEvent?.(message);
+  };
+
+  const handleError = (message: WebSocketMessage) => {
+    callbacks.onConnectionEvent?.(message);
+  };
+
+  wsClient.on('reminder', handleReminder);
+  wsClient.on('connected', handleConnected);
+  wsClient.on('disconnected', handleDisconnected);
+  wsClient.on('reconnecting', handleReconnect);
+  wsClient.on('error', handleError);
+
+  wsClient.connect(token, userId);
+
+  const cleanup = () => {
+    wsClient.off('reminder', handleReminder);
+    wsClient.off('connected', handleConnected);
+    wsClient.off('disconnected', handleDisconnected);
+    wsClient.off('reconnecting', handleReconnect);
+    wsClient.off('error', handleError);
     wsClient.disconnect();
+  };
+
+  reminderCleanup = cleanup;
+  return cleanup;
 }
 
-/**
- * 检查提醒服务是否已连接
- */
-export function isReminderServiceConnected(): boolean {
-    return wsClient.isConnected;
+export function disconnectReminderService(): void {
+  if (reminderCleanup) {
+    reminderCleanup();
+    reminderCleanup = null;
+    return;
+  }
+
+  wsClient.disconnect();
 }
+
+export function isReminderServiceConnected(): boolean {
+  return wsClient.isConnected;
+}
+
+
+

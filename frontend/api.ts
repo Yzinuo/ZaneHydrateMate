@@ -1,43 +1,68 @@
-const API_URL = '/api/v1';
+﻿const API_URL = ((import.meta.env.VITE_API_URL as string | undefined) || '/api/v1').replace(/\/+$/, '');
 
-// Token management
-let accessToken: string | null = null;
+let accessToken: string | null = ((import.meta.env.VITE_ACCESS_TOKEN as string | undefined) || '').trim() || null;
 
-export const setAccessToken = (token: string | null) => {
-  accessToken = token;
-  if (token) {
-    localStorage.setItem('access_token', token);
-  } else {
-    localStorage.removeItem('access_token');
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+
+  constructor(message: string, status: number, code: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
   }
-};
-
-export const getAccessToken = (): string | null => {
-  if (!accessToken) {
-    accessToken = localStorage.getItem('access_token');
-  }
-  return accessToken;
-};
-
-// Auth header helper
-const authHeaders = (): HeadersInit => {
-  const token = getAccessToken();
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-  };
-};
-
-// API response handler
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'unknown_error' }));
-    throw new Error(error.error || 'request_failed');
-  }
-  return response.json();
 }
 
-// Auth API
+export const setAccessToken = (token: string | null): void => {
+  accessToken = token;
+};
+
+export const getAccessToken = (): string | null => accessToken;
+
+const authHeaders = (): HeadersInit => ({
+  'Content-Type': 'application/json',
+  ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+});
+
+const getErrorCode = (status: number, payload: unknown): string => {
+  if (payload && typeof payload === 'object' && 'error' in payload) {
+    const code = (payload as { error?: unknown }).error;
+    if (typeof code === 'string' && code.trim().length > 0) {
+      return code;
+    }
+  }
+  return `http_${status}`;
+};
+
+const getErrorMessage = (status: number, payload: unknown): string => {
+  if (payload && typeof payload === 'object') {
+    const message = (payload as { message?: unknown; error?: unknown }).message;
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return message;
+    }
+
+    const error = (payload as { error?: unknown }).error;
+    if (typeof error === 'string' && error.trim().length > 0) {
+      return error;
+    }
+  }
+
+  return `Request failed (${status})`;
+};
+
+async function handleResponse<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get('content-type') || '';
+  const hasJsonBody = contentType.includes('application/json');
+  const payload = hasJsonBody ? await response.json().catch(() => null) : null;
+
+  if (!response.ok) {
+    throw new ApiError(getErrorMessage(response.status, payload), response.status, getErrorCode(response.status, payload));
+  }
+
+  return payload as T;
+}
+
 export interface AuthResponse {
   access_token: string;
   refresh_token: string;
@@ -51,6 +76,7 @@ export const authApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
+
     const data = await handleResponse<AuthResponse>(res);
     setAccessToken(data.access_token);
     return data;
@@ -62,17 +88,17 @@ export const authApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
+
     const data = await handleResponse<AuthResponse>(res);
     setAccessToken(data.access_token);
     return data;
   },
 
-  logout() {
+  logout(): void {
     setAccessToken(null);
   }
 };
 
-// Intake API
 export interface IntakeResponse {
   id: string;
   amount_ml: number;
@@ -87,29 +113,40 @@ export interface IntakeListResponse {
   page_size: number;
 }
 
+export interface IntakeAddRequest {
+  amount_ml: number;
+  category?: string;
+  intake_time?: string;
+}
+
 export const intakeApi = {
-  async add(amountMl: number, category: string = 'water'): Promise<IntakeResponse> {
+  async add(amountMl: number, category = 'water', intakeTime?: string): Promise<IntakeResponse> {
+    const body: IntakeAddRequest = {
+      amount_ml: amountMl,
+      category,
+      intake_time: intakeTime || new Date().toISOString()
+    };
+
     const res = await fetch(`${API_URL}/intakes`, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({
-        amount_ml: amountMl,
-        category,
-        intake_time: new Date().toISOString()
-      })
+      body: JSON.stringify(body)
     });
+
     return handleResponse<IntakeResponse>(res);
   },
 
-  async list(from?: string, to?: string, page: number = 1): Promise<IntakeListResponse> {
+  async list(from?: string, to?: string, page = 1, pageSize = 100): Promise<IntakeListResponse> {
     const params = new URLSearchParams();
     if (from) params.set('from', from);
     if (to) params.set('to', to);
     params.set('page', String(page));
+    params.set('page_size', String(pageSize));
 
-    const res = await fetch(`${API_URL}/intakes?${params}`, {
+    const res = await fetch(`${API_URL}/intakes?${params.toString()}`, {
       headers: authHeaders()
     });
+
     return handleResponse<IntakeListResponse>(res);
   },
 
@@ -118,21 +155,24 @@ export const intakeApi = {
       method: 'DELETE',
       headers: authHeaders()
     });
+
     await handleResponse<{ message: string }>(res);
   }
 };
 
-// Stats API
 export interface DailyStatsData {
   stat_date: string;
   total_ml: number;
   is_goal_met: boolean;
+  streak_days: number;
 }
 
 export interface WeeklyStatsResponse {
   week_start: string;
   total_ml: number;
   avg_daily: number;
+  days_logged: number;
+  goals_met: number;
   daily_data: DailyStatsData[];
 }
 
@@ -146,6 +186,10 @@ export interface BestTimeResponse {
   total_ml: number;
   avg_ml: number;
   days: number;
+}
+
+interface BestTimeEmptyResponse {
+  message: string;
 }
 
 export interface GapInfo {
@@ -176,10 +220,11 @@ export interface HealthResponse {
 
 export const statsApi = {
   async getWeekly(weekStart?: string): Promise<WeeklyStatsResponse> {
-    const params = weekStart ? `?week_start=${weekStart}` : '';
+    const params = weekStart ? `?week_start=${encodeURIComponent(weekStart)}` : '';
     const res = await fetch(`${API_URL}/stats/weekly${params}`, {
       headers: authHeaders()
     });
+
     return handleResponse<WeeklyStatsResponse>(res);
   },
 
@@ -187,41 +232,56 @@ export const statsApi = {
     const res = await fetch(`${API_URL}/stats/streak`, {
       headers: authHeaders()
     });
+
     return handleResponse<StreakResponse>(res);
   },
 
-  async getBestTime(days: number = 7): Promise<BestTimeResponse> {
+  async getBestTime(days = 7): Promise<BestTimeResponse | null> {
     const res = await fetch(`${API_URL}/stats/best-time?days=${days}`, {
       headers: authHeaders()
     });
-    return handleResponse<BestTimeResponse>(res);
+
+    const data = await handleResponse<BestTimeResponse | BestTimeEmptyResponse>(res);
+    return 'message' in data ? null : data;
   },
 
-  async getGaps(date: string, threshold: number = 240): Promise<GapsResponse> {
-    const res = await fetch(`${API_URL}/stats/gaps?date=${date}&threshold=${threshold}`, {
-      headers: authHeaders()
-    });
+  async getGaps(date: string, threshold = 240): Promise<GapsResponse> {
+    const res = await fetch(
+      `${API_URL}/stats/gaps?date=${encodeURIComponent(date)}&threshold=${threshold}`,
+      { headers: authHeaders() }
+    );
+
     return handleResponse<GapsResponse>(res);
   },
 
-  async getHealth(date: string, goal: number = 2000): Promise<HealthResponse> {
-    const res = await fetch(`${API_URL}/stats/health?date=${date}&goal=${goal}`, {
-      headers: authHeaders()
-    });
+  async getHealth(date: string, goal = 2000): Promise<HealthResponse> {
+    const res = await fetch(
+      `${API_URL}/stats/health?date=${encodeURIComponent(date)}&goal=${goal}`,
+      { headers: authHeaders() }
+    );
+
     return handleResponse<HealthResponse>(res);
   }
 };
 
-// Profile API
+export interface ProfileData {
+  user_id: string;
+  height_cm: number;
+  weight_kg: number;
+  age: number;
+}
+
 export interface ProfileResponse {
-  profile: {
-    user_id: string;
-    height_cm: number;
-    weight_kg: number;
-    age: number;
-  };
+  profile: ProfileData;
   recommended_ml: number;
   current_goal_ml: number;
+}
+
+export interface ProfileUpdateRequest {
+  height_cm: number;
+  weight_kg: number;
+  age: number;
+  apply_recommend: boolean;
 }
 
 export const profileApi = {
@@ -229,25 +289,21 @@ export const profileApi = {
     const res = await fetch(`${API_URL}/profile`, {
       headers: authHeaders()
     });
+
     return handleResponse<ProfileResponse>(res);
   },
 
-  async update(profile: { heightCm: number; weightKg: number; age: number }, applyRecommend: boolean = true): Promise<ProfileResponse> {
+  async update(profile: ProfileUpdateRequest): Promise<ProfileResponse> {
     const res = await fetch(`${API_URL}/profile`, {
       method: 'PUT',
       headers: authHeaders(),
-      body: JSON.stringify({
-        height_cm: profile.heightCm,
-        weight_kg: profile.weightKg,
-        age: profile.age,
-        apply_recommend: applyRecommend
-      })
+      body: JSON.stringify(profile)
     });
+
     return handleResponse<ProfileResponse>(res);
   }
 };
 
-// Settings API
 export interface SettingsResponse {
   daily_goal_ml: number;
   reminder_intensity: number;
@@ -255,34 +311,60 @@ export interface SettingsResponse {
   quiet_hours_end: string;
 }
 
+export interface SettingsUpdateRequest {
+  daily_goal_ml?: number;
+  reminder_intensity?: number;
+  quiet_hours_start?: string;
+  quiet_hours_end?: string;
+}
+
 export const settingsApi = {
   async get(): Promise<SettingsResponse> {
     const res = await fetch(`${API_URL}/settings`, {
       headers: authHeaders()
     });
+
     return handleResponse<SettingsResponse>(res);
   },
 
-  async update(settings: Partial<{
-    dailyGoalMl: number;
-    reminderIntensity: number;
-    quietHoursStart: string;
-    quietHoursEnd: string;
-  }>): Promise<SettingsResponse> {
+  async update(settings: SettingsUpdateRequest): Promise<SettingsResponse> {
     const res = await fetch(`${API_URL}/settings`, {
       method: 'PUT',
       headers: authHeaders(),
-      body: JSON.stringify({
-        daily_goal_ml: settings.dailyGoalMl,
-        reminder_intensity: settings.reminderIntensity,
-        quiet_hours_start: settings.quietHoursStart,
-        quiet_hours_end: settings.quietHoursEnd
-      })
+      body: JSON.stringify(settings)
     });
+
     return handleResponse<SettingsResponse>(res);
   }
 };
 
-export const isAuthenticated = (): boolean => {
-  return !!getAccessToken();
+export const isAuthenticated = (): boolean => Boolean(getAccessToken());
+
+export const getWebSocketBaseUrl = (): string => {
+  const explicit = (import.meta.env.VITE_WS_URL as string | undefined)?.trim();
+  if (explicit) {
+    return explicit.replace(/\/+$/, '');
+  }
+
+  if (typeof window === 'undefined') {
+    return 'ws://localhost:8080';
+  }
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}`;
 };
+
+export const getWebSocketToken = (): string | null => {
+  const explicit = ((import.meta.env.VITE_WS_TOKEN as string | undefined) || '').trim();
+  if (explicit) {
+    return explicit;
+  }
+
+  return getAccessToken();
+};
+
+export const getWebSocketUserId = (): string | null => {
+  const explicit = ((import.meta.env.VITE_WS_USER_ID as string | undefined) || '').trim();
+  return explicit || null;
+};
+

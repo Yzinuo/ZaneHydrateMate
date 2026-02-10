@@ -1,199 +1,222 @@
-/**
- * WebSocket 客户端 - 用于接收后端提醒推送
+﻿/**
+ * WebSocket client for reminder messages.
  */
+
+import { getWebSocketBaseUrl } from '../api';
 
 type MessageHandler = (message: WebSocketMessage) => void;
 
+export type WebSocketMessageType =
+  | 'reminder'
+  | 'connected'
+  | 'pong'
+  | 'error'
+  | 'disconnected'
+  | 'reconnecting';
+
 export interface WebSocketMessage {
-    type: 'reminder' | 'connected' | 'pong' | 'error';
-    payload: any;
+  type: WebSocketMessageType;
+  payload: unknown;
 }
 
 export interface ReminderPayload {
-    title: string;
-    body: string;
-    current_ml: number;
-    goal_ml: number;
-    timestamp: number;
+  title: string;
+  body: string;
+  current_ml: number;
+  goal_ml: number;
+  timestamp: number;
 }
 
 class WebSocketClient {
-    private ws: WebSocket | null = null;
-    private url: string;
-    private token: string = '';
-    private userId: string = '';
-    private reconnectAttempts = 0;
-    private maxReconnectAttempts = 5;
-    private reconnectDelay = 3000;
-    private handlers: Map<string, MessageHandler[]> = new Map();
-    private pingInterval: number | null = null;
+  private ws: WebSocket | null = null;
+  private baseUrl: string;
+  private token = '';
+  private userId = '';
+  private reconnectAttempts = 0;
+  private readonly maxReconnectAttempts = 6;
+  private readonly baseReconnectDelay = 1500;
+  private readonly maxReconnectDelay = 15000;
+  private reconnectTimer: number | null = null;
+  private pingInterval: number | null = null;
+  private handlers: Map<string, Set<MessageHandler>> = new Map();
+  private shouldReconnect = false;
 
-    constructor(baseUrl: string = 'ws://localhost:8080') {
-        this.url = baseUrl;
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl;
+  }
+
+  connect(token: string, userId: string): void {
+    this.token = token;
+    this.userId = userId;
+    this.shouldReconnect = true;
+
+    if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) {
+      return;
     }
 
-    /**
-     * 连接到 WebSocket 服务器
-     */
-    connect(token: string, userId: string): void {
-        this.token = token;
-        this.userId = userId;
+    this.openSocket();
+  }
 
-        if (this.ws?.readyState === WebSocket.OPEN) {
-            console.log('WebSocket already connected');
-            return;
-        }
+  disconnect(): void {
+    this.shouldReconnect = false;
+    this.reconnectAttempts = 0;
 
-        const wsUrl = `${this.url}/api/v1/ws?token=${encodeURIComponent(token)}&user_id=${encodeURIComponent(userId)}`;
-
-        try {
-            this.ws = new WebSocket(wsUrl);
-            this.setupEventHandlers();
-        } catch (error) {
-            console.error('WebSocket connection failed:', error);
-            this.scheduleReconnect();
-        }
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
 
-    /**
-     * 断开连接
-     */
-    disconnect(): void {
-        if (this.pingInterval) {
-            clearInterval(this.pingInterval);
-            this.pingInterval = null;
-        }
+    this.stopPingInterval();
 
-        if (this.ws) {
-            this.ws.close(1000, 'Client disconnect');
-            this.ws = null;
-        }
-
-        this.reconnectAttempts = 0;
+    if (this.ws) {
+      this.ws.close(1000, 'Client disconnect');
+      this.ws = null;
     }
 
-    /**
-     * 注册消息处理器
-     */
-    on(type: string, handler: MessageHandler): void {
-        if (!this.handlers.has(type)) {
-            this.handlers.set(type, []);
-        }
-        this.handlers.get(type)!.push(handler);
+    this.dispatchMessage({ type: 'disconnected', payload: { reason: 'manual_disconnect' } });
+  }
+
+  on(type: WebSocketMessageType | '*', handler: MessageHandler): void {
+    if (!this.handlers.has(type)) {
+      this.handlers.set(type, new Set());
     }
 
-    /**
-     * 移除消息处理器
-     */
-    off(type: string, handler: MessageHandler): void {
-        const handlers = this.handlers.get(type);
-        if (handlers) {
-            const index = handlers.indexOf(handler);
-            if (index > -1) {
-                handlers.splice(index, 1);
-            }
-        }
+    this.handlers.get(type)?.add(handler);
+  }
+
+  off(type: WebSocketMessageType | '*', handler: MessageHandler): void {
+    this.handlers.get(type)?.delete(handler);
+  }
+
+  send(type: string, payload: unknown = {}): void {
+    if (this.ws?.readyState !== WebSocket.OPEN) {
+      return;
     }
 
-    /**
-     * 发送消息
-     */
-    send(type: string, payload: any = {}): void {
-        if (this.ws?.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ type, payload }));
-        }
+    this.ws.send(JSON.stringify({ type, payload }));
+  }
+
+  ackReminder(): void {
+    this.send('ack');
+  }
+
+  get isConnected(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  private openSocket(): void {
+    if (!this.token || !this.userId) {
+      return;
     }
 
-    /**
-     * 发送确认收到提醒
-     */
-    ackReminder(): void {
-        this.send('ack');
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
 
-    private setupEventHandlers(): void {
-        if (!this.ws) return;
+    const url = `${this.baseUrl}/api/v1/ws?token=${encodeURIComponent(this.token)}&user_id=${encodeURIComponent(this.userId)}`;
 
-        this.ws.onopen = () => {
-            console.log('WebSocket connected');
-            this.reconnectAttempts = 0;
-            this.startPingInterval();
-        };
+    try {
+      this.ws = new WebSocket(url);
+      this.setupEventHandlers();
+    } catch (error) {
+      this.dispatchMessage({ type: 'error', payload: { reason: 'connect_exception', error } });
+      this.scheduleReconnect();
+    }
+  }
 
-        this.ws.onclose = (event) => {
-            console.log('WebSocket closed:', event.code, event.reason);
-            this.stopPingInterval();
-
-            if (event.code !== 1000) {
-                this.scheduleReconnect();
-            }
-        };
-
-        this.ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
-
-        this.ws.onmessage = (event) => {
-            try {
-                const message: WebSocketMessage = JSON.parse(event.data);
-                this.dispatchMessage(message);
-            } catch (error) {
-                console.error('Failed to parse WebSocket message:', error);
-            }
-        };
+  private setupEventHandlers(): void {
+    if (!this.ws) {
+      return;
     }
 
-    private dispatchMessage(message: WebSocketMessage): void {
-        // 调用特定类型的处理器
-        const handlers = this.handlers.get(message.type);
-        if (handlers) {
-            handlers.forEach(handler => handler(message));
-        }
+    this.ws.onopen = () => {
+      this.reconnectAttempts = 0;
+      this.startPingInterval();
+    };
 
-        // 调用通用处理器
-        const allHandlers = this.handlers.get('*');
-        if (allHandlers) {
-            allHandlers.forEach(handler => handler(message));
-        }
+    this.ws.onclose = (event) => {
+      this.stopPingInterval();
+      this.ws = null;
+
+      this.dispatchMessage({
+        type: 'disconnected',
+        payload: { code: event.code, reason: event.reason }
+      });
+
+      if (this.shouldReconnect && event.code !== 1000) {
+        this.scheduleReconnect();
+      }
+    };
+
+    this.ws.onerror = (error) => {
+      this.dispatchMessage({ type: 'error', payload: { reason: 'socket_error', error } });
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const parsed = JSON.parse(event.data) as WebSocketMessage;
+        this.dispatchMessage(parsed);
+      } catch (error) {
+        this.dispatchMessage({ type: 'error', payload: { reason: 'parse_error', error } });
+      }
+    };
+  }
+
+  private scheduleReconnect(): void {
+    if (!this.shouldReconnect) {
+      return;
     }
 
-    private scheduleReconnect(): void {
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.log('Max reconnect attempts reached');
-            return;
-        }
-
-        this.reconnectAttempts++;
-        const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-
-        console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
-
-        setTimeout(() => {
-            if (this.token && this.userId) {
-                this.connect(this.token, this.userId);
-            }
-        }, delay);
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      this.dispatchMessage({
+        type: 'error',
+        payload: { reason: 'max_retries_reached', attempts: this.reconnectAttempts }
+      });
+      return;
     }
 
-    private startPingInterval(): void {
-        this.pingInterval = window.setInterval(() => {
-            this.send('ping');
-        }, 30000);
-    }
+    this.reconnectAttempts += 1;
 
-    private stopPingInterval(): void {
-        if (this.pingInterval) {
-            clearInterval(this.pingInterval);
-            this.pingInterval = null;
-        }
-    }
+    const delay = Math.min(
+      this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts - 1),
+      this.maxReconnectDelay
+    );
 
-    get isConnected(): boolean {
-        return this.ws?.readyState === WebSocket.OPEN;
+    this.dispatchMessage({
+      type: 'reconnecting',
+      payload: { attempt: this.reconnectAttempts, delay }
+    });
+
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      this.openSocket();
+    }, delay);
+  }
+
+  private startPingInterval(): void {
+    this.stopPingInterval();
+
+    this.pingInterval = window.setInterval(() => {
+      this.send('ping');
+    }, 30000);
+  }
+
+  private stopPingInterval(): void {
+    if (this.pingInterval !== null) {
+      window.clearInterval(this.pingInterval);
+      this.pingInterval = null;
     }
+  }
+
+  private dispatchMessage(message: WebSocketMessage): void {
+    const specific = this.handlers.get(message.type);
+    specific?.forEach((handler) => handler(message));
+
+    const allHandlers = this.handlers.get('*');
+    allHandlers?.forEach((handler) => handler(message));
+  }
 }
 
-// 单例导出
-export const wsClient = new WebSocketClient(
-    import.meta.env.VITE_WS_URL || 'ws://localhost:8080'
-);
+export const wsClient = new WebSocketClient(getWebSocketBaseUrl());
+
