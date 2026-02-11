@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ChevronLeft, Save, User, Activity, Ruler, Scale } from 'lucide-react';
 import { UserProfile } from '../types';
 
@@ -20,19 +20,6 @@ const getSafeProfile = (profile?: UserProfile): UserProfile => ({
   activityLevel: profile?.activityLevel ?? 'moderate'
 });
 
-const calcPreviewRecommendedGoal = (profile: UserProfile): number => {
-  let base = profile.weightKg * 30;
-
-  if (profile.age < 14) {
-    base = profile.weightKg * 40;
-  } else if (profile.age >= 65) {
-    base = profile.weightKg * 28;
-  }
-
-  base = Math.max(1200, Math.min(4000, base));
-  return Math.round(base / 50) * 50;
-};
-
 export const Profile: React.FC<ProfileProps> = ({
   initial,
   recommendedMl,
@@ -49,8 +36,6 @@ export const Profile: React.FC<ProfileProps> = ({
   useEffect(() => {
     setProfile(getSafeProfile(initial));
   }, [initial]);
-
-  const previewGoal = useMemo(() => calcPreviewRecommendedGoal(profile), [profile]);
 
   const handleSubmit = async () => {
     await onSave(profile, applyRecommend);
@@ -133,7 +118,7 @@ export const Profile: React.FC<ProfileProps> = ({
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-[10px] text-gray-400 uppercase font-bold tracking-wider">
             <Activity className="w-3 h-3" />
-            活动强度（仅用于本地预估展示）
+            活动强度
           </label>
           <div className="grid grid-cols-3 gap-2">
             {[
@@ -159,13 +144,12 @@ export const Profile: React.FC<ProfileProps> = ({
       </div>
 
       <div className="bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100 text-center">
-        <p className="text-xs text-gray-400 mb-2">后端推荐饮水量（recommended_ml）</p>
+        <p className="text-xs text-gray-400 mb-2">推荐饮水量</p>
         <div className="flex items-baseline justify-center gap-2">
           <span className="text-4xl font-black text-[#0dc792]">{recommendedMl.toLocaleString()}</span>
           <span className="text-lg text-gray-400">ml</span>
         </div>
-        <p className="text-[10px] text-gray-300 mt-3">当前目标（current_goal_ml）：{currentGoalMl.toLocaleString()} ml</p>
-        <p className="text-[10px] text-gray-300 mt-1">本地预估：{previewGoal.toLocaleString()} ml</p>
+        <p className="text-[10px] text-gray-300 mt-3">当前目标：{currentGoalMl.toLocaleString()} ml</p>
       </div>
 
       <label className="flex items-center gap-2 text-sm text-gray-600">
@@ -191,4 +175,3 @@ export const Profile: React.FC<ProfileProps> = ({
     </div>
   );
 };
-

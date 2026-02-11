@@ -104,7 +104,7 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 
 const loadDrinkOptions = (): DrinkOption[] => {
   try {
-    // 强制刷新一次缓存，解决之前的乱码问题
+    // Force refresh cached options once.
     if (!window.localStorage.getItem(FORCE_REFRESH_KEY)) {
       window.localStorage.setItem(DRINK_OPTIONS_KEY, JSON.stringify(DEFAULT_DRINKS));
       window.localStorage.setItem(FORCE_REFRESH_KEY, 'true');
@@ -208,6 +208,22 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const refreshAfterIntakeMutation = useCallback(async () => {
+    const today = getTodayDate();
+    const tomorrow = getTomorrowDate();
+
+    const [settings, intakeList, streak, weekly] = await Promise.all([
+      settingsApi.get(),
+      intakeApi.list(today, tomorrow, 1, 200),
+      statsApi.getStreak(),
+      statsApi.getWeekly()
+    ]);
+
+    setSettingsData(settings);
+    setTodayIntakes(intakeList.intakes);
+    setStreakData(streak);
+    setWeeklyData(weekly);
+  }, []);
   const loadStatsData = useCallback(async () => {
     setStatsLoading(true);
     setStatsError(null);
@@ -245,31 +261,26 @@ const App: React.FC = () => {
     }
   }, [showSplash, loadHomeData]);
 
-  const handleAddWater = useCallback(async (amount: number, category = 'water') => {
-    if (amount <= 0) {
-      return;
-    }
+  const handleAddWater = useCallback(
+    async (amount: number, category = 'water') => {
+      if (amount <= 0) {
+        return;
+      }
 
-    setHomeMutating(true);
-    setHomeError(null);
+      setHomeMutating(true);
+      setHomeError(null);
 
-    try {
-      const intake = await intakeApi.add(amount, category);
-      setTodayIntakes((prev) => [...prev, intake]);
-      setWeeklyData((prev) =>
-        prev
-          ? {
-              ...prev,
-              total_ml: prev.total_ml + intake.amount_ml
-            }
-          : prev
-      );
-    } catch (error) {
-      setHomeError(getErrorMessage(error, '饮水记录写入失败'));
-    } finally {
-      setHomeMutating(false);
-    }
-  }, []);
+      try {
+        await intakeApi.add(amount, category);
+        await refreshAfterIntakeMutation();
+      } catch (error) {
+        setHomeError(getErrorMessage(error, '饮水记录写入失败'));
+      } finally {
+        setHomeMutating(false);
+      }
+    },
+    [refreshAfterIntakeMutation]
+  );
 
   const handleGoalConfirm = useCallback(async (goal: number) => {
     setGoalSaving(true);

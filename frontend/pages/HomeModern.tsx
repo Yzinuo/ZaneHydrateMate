@@ -127,11 +127,8 @@ export const HomeModern: React.FC<HomeProps> = ({
           <p className="text-xs text-gray-400">坚持喝水，见证成长</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="p-2 bg-white rounded-full shadow-sm text-gray-400 hover:text-[#0dc792] transition-colors">
-            <Bell size={20} />
-          </button>
-          <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden border-2 border-white shadow-sm">
-            <img src={IMAGES.AVATAR} className="w-full h-full object-cover" alt="Profile" />
+          <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden border-2 border-white shadow-sm">
+            <img src="/img/icon.png" className="w-full h-full object-cover" alt="Profile" />
           </div>
         </div>
       </div>
@@ -139,15 +136,11 @@ export const HomeModern: React.FC<HomeProps> = ({
       <div className="flex-1 flex flex-col items-center justify-center relative -mt-6">
         <div className="mb-8 flex flex-col items-center z-10">
           <span className="text-sm font-medium text-gray-400 uppercase tracking-widest mb-1">今日目标</span>
-          <button
-            onClick={onOpenGoalSettings}
-            className="text-4xl font-black text-gray-800 flex items-baseline hover:text-[#0dc792] transition-colors"
-          >
+          <div className="text-4xl font-black text-gray-800 flex items-baseline">
             {safeCurrentIntake}
             <span className="text-lg font-bold text-gray-400 ml-1">/ {safeDailyGoal}</span>
             <span className="text-xs font-normal text-gray-400 ml-1">ml</span>
-            {onOpenGoalSettings ? <Target className="ml-2 w-4 h-4 text-gray-300" /> : null}
-          </button>
+          </div>
         </div>
 
         <div className="relative w-[75vw] h-[75vw] max-w-[320px] max-h-[320px] flex items-center justify-center z-0">

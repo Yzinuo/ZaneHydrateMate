@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Notification bridge for websocket reminders.
  */
 

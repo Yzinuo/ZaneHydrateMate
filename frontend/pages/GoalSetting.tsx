@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GlassCard } from '../components/GlassCard';
 import { ChevronLeft, Check, Edit2, Calendar, Minus, Plus } from 'lucide-react';
 
@@ -59,9 +59,9 @@ export const GoalSetting: React.FC<GoalSettingProps> = ({
 
           <div className="space-y-2 relative z-10">
             <p className="text-green-300 font-medium text-xs tracking-wide opacity-90 uppercase">当前每日饮水目标</p>
-            <div className="flex items-baseline justify-center gap-1.5 text-white my-3">
+            <div className="flex items-baseline justify-center gap-1.5 text-[#0dc792] my-3">
               <span className="text-7xl font-black tracking-tighter">{goal}</span>
-              <span className="text-2xl font-bold opacity-60">ml</span>
+              <span className="text-2xl font-bold opacity-60 text-white">ml</span>
             </div>
             <h2 className="text-xl font-bold text-white">你的每日目标</h2>
 

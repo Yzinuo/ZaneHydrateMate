@@ -1,4 +1,4 @@
-﻿const API_URL = ((import.meta.env.VITE_API_URL as string | undefined) || '/api/v1').replace(/\/+$/, '');
+const API_URL = ((import.meta.env.VITE_API_URL as string | undefined) || '/api/v1').replace(/\/+$/, '');
 
 let accessToken: string | null = ((import.meta.env.VITE_ACCESS_TOKEN as string | undefined) || '').trim() || null;
 
