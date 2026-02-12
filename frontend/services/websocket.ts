@@ -1,4 +1,4 @@
-﻿/**
+/**
  * WebSocket client for reminder messages.
  */
 
