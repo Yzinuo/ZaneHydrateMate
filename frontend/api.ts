@@ -1,6 +1,274 @@
-const API_URL = ((import.meta.env.VITE_API_URL as string | undefined) || '/api/v1').replace(/\/+$/, '');
+import {
+  getLocalDbHealth,
+  initializeLocalDb,
+  readLocalDbState,
+  writeLocalDbState
+} from './services/localDb';
 
-let accessToken: string | null = ((import.meta.env.VITE_ACCESS_TOKEN as string | undefined) || '').trim() || null;
+const LOCAL_SESSION_KEY = 'hydratemate_local_session_v1';
+const LOCAL_USER_ID = 'local-user';
+const DEFAULT_EMAIL = 'local@hydratemate.app';
+
+const DEFAULT_SETTINGS: SettingsResponse = {
+  daily_goal_ml: 2000,
+  reminder_intensity: 2,
+  reminder_enabled: false,
+  reminder_interval_minutes: 60,
+  quiet_hours_enabled: true,
+  quiet_hours_start: '23:00',
+  quiet_hours_end: '07:00'
+};
+
+const DEFAULT_PROFILE: ProfileData = {
+  user_id: LOCAL_USER_ID,
+  height_cm: 170,
+  weight_kg: 60,
+  age: 25
+};
+
+interface LocalDbState {
+  profile: ProfileData;
+  settings: SettingsResponse;
+  intakes: IntakeResponse[];
+}
+
+interface LocalSession {
+  token: string;
+  refreshToken: string;
+  user: {
+    id: string;
+    email: string;
+  };
+}
+
+const canUseLocalStorage = (): boolean => typeof window !== 'undefined' && !!window.localStorage;
+
+const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
+const round1 = (value: number): number => Math.round(value * 10) / 10;
+const pad2 = (value: number): string => String(value).padStart(2, '0');
+const isValidTimeString = (value: string): boolean => /^\d{2}:\d{2}$/.test(value);
+
+const generateId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const toLocalDateKey = (date: Date): string =>
+  `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+
+const parseDateKey = (value: string): Date => {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    return new Date(year, month - 1, day, 0, 0, 0, 0);
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return now;
+  }
+
+  parsed.setHours(0, 0, 0, 0);
+  return parsed;
+};
+
+const getDayBounds = (value: string): { start: Date; end: Date } => {
+  const start = parseDateKey(value);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 1);
+  return { start, end };
+};
+
+const readJson = <T>(key: string): T | null => {
+  if (!canUseLocalStorage()) {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(key);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+};
+
+const writeJson = (key: string, value: unknown): void => {
+  if (!canUseLocalStorage()) {
+    return;
+  }
+
+  window.localStorage.setItem(key, JSON.stringify(value));
+};
+
+const getDefaultDbState = (): LocalDbState => ({
+  profile: { ...DEFAULT_PROFILE },
+  settings: { ...DEFAULT_SETTINGS },
+  intakes: []
+});
+
+let localDbReady = false;
+let localDbReadyPromise: Promise<void> | null = null;
+
+const ensureLocalDbReady = async (): Promise<void> => {
+  if (localDbReady) {
+    return;
+  }
+
+  if (!localDbReadyPromise) {
+    localDbReadyPromise = initializeLocalDb(getDefaultDbState())
+      .then(() => {
+        localDbReady = true;
+      })
+      .finally(() => {
+        localDbReadyPromise = null;
+      });
+  }
+
+  await localDbReadyPromise;
+};
+
+const readDbState = async (): Promise<LocalDbState> => {
+  await ensureLocalDbReady();
+  return readLocalDbState(getDefaultDbState()) as Promise<LocalDbState>;
+};
+
+const writeDbState = async (state: LocalDbState): Promise<void> => {
+  await ensureLocalDbReady();
+  await writeLocalDbState(state, getDefaultDbState());
+};
+
+export const initializeLocalDataLayer = async (): Promise<void> => {
+  await ensureLocalDbReady();
+};
+
+export const getLocalDataLayerHealth = (): ReturnType<typeof getLocalDbHealth> => getLocalDbHealth();
+
+const readSession = (): LocalSession | null => {
+  const session = readJson<LocalSession>(LOCAL_SESSION_KEY);
+  if (!session) {
+    return null;
+  }
+
+  if (
+    typeof session.token !== 'string' ||
+    typeof session.refreshToken !== 'string' ||
+    !session.user ||
+    typeof session.user.id !== 'string' ||
+    typeof session.user.email !== 'string'
+  ) {
+    return null;
+  }
+
+  return session;
+};
+
+const writeSession = (session: LocalSession | null): void => {
+  if (!canUseLocalStorage()) {
+    return;
+  }
+
+  if (!session) {
+    window.localStorage.removeItem(LOCAL_SESSION_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(session));
+};
+
+const getWeekStart = (weekStart?: string): Date => {
+  if (weekStart) {
+    return parseDateKey(weekStart);
+  }
+
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const diff = (now.getDay() + 6) % 7;
+  now.setDate(now.getDate() - diff);
+  return now;
+};
+
+const buildDailyTotals = (intakes: IntakeResponse[]): Map<string, number> => {
+  const totals = new Map<string, number>();
+
+  intakes.forEach((item) => {
+    const key = toLocalDateKey(new Date(item.intake_time));
+    totals.set(key, (totals.get(key) || 0) + item.amount_ml);
+  });
+
+  return totals;
+};
+
+const calculateStreakForDate = (targetDate: Date, totals: Map<string, number>, goal: number): number => {
+  if (goal <= 0) {
+    return 0;
+  }
+
+  const cursor = new Date(targetDate);
+  let streak = 0;
+
+  while (true) {
+    const key = toLocalDateKey(cursor);
+    const total = totals.get(key) || 0;
+
+    if (total < goal) {
+      break;
+    }
+
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  return streak;
+};
+
+const calculateRecommendedGoal = (profile: ProfileData): number => {
+  const base = profile.weight_kg * 30;
+  const ageAdjustment = profile.age >= 55 ? -200 : profile.age <= 18 ? 200 : 0;
+  return clamp(Math.round(base + ageAdjustment), 1200, 4000);
+};
+
+const createLocalAuthResponse = (email: string): AuthResponse => {
+  const session: LocalSession = {
+    token: `local-token-${generateId()}`,
+    refreshToken: `local-refresh-${generateId()}`,
+    user: {
+      id: LOCAL_USER_ID,
+      email
+    }
+  };
+
+  writeSession(session);
+  setAccessToken(session.token);
+
+  return {
+    access_token: session.token,
+    refresh_token: session.refreshToken,
+    user: session.user
+  };
+};
+
+const getInitialToken = (): string | null => {
+  const fromSession = readSession()?.token;
+  if (fromSession) {
+    return fromSession;
+  }
+
+  const fromEnv = (import.meta.env.VITE_ACCESS_TOKEN as string | undefined)?.trim();
+  return fromEnv || null;
+};
+
+let accessToken: string | null = getInitialToken();
 
 export class ApiError extends Error {
   readonly status: number;
@@ -16,52 +284,24 @@ export class ApiError extends Error {
 
 export const setAccessToken = (token: string | null): void => {
   accessToken = token;
+
+  const session = readSession();
+  if (!session) {
+    return;
+  }
+
+  if (!token) {
+    writeSession(null);
+    return;
+  }
+
+  writeSession({
+    ...session,
+    token
+  });
 };
 
 export const getAccessToken = (): string | null => accessToken;
-
-const authHeaders = (): HeadersInit => ({
-  'Content-Type': 'application/json',
-  ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
-});
-
-const getErrorCode = (status: number, payload: unknown): string => {
-  if (payload && typeof payload === 'object' && 'error' in payload) {
-    const code = (payload as { error?: unknown }).error;
-    if (typeof code === 'string' && code.trim().length > 0) {
-      return code;
-    }
-  }
-  return `http_${status}`;
-};
-
-const getErrorMessage = (status: number, payload: unknown): string => {
-  if (payload && typeof payload === 'object') {
-    const message = (payload as { message?: unknown; error?: unknown }).message;
-    if (typeof message === 'string' && message.trim().length > 0) {
-      return message;
-    }
-
-    const error = (payload as { error?: unknown }).error;
-    if (typeof error === 'string' && error.trim().length > 0) {
-      return error;
-    }
-  }
-
-  return `Request failed (${status})`;
-};
-
-async function handleResponse<T>(response: Response): Promise<T> {
-  const contentType = response.headers.get('content-type') || '';
-  const hasJsonBody = contentType.includes('application/json');
-  const payload = hasJsonBody ? await response.json().catch(() => null) : null;
-
-  if (!response.ok) {
-    throw new ApiError(getErrorMessage(response.status, payload), response.status, getErrorCode(response.status, payload));
-  }
-
-  return payload as T;
-}
 
 export interface AuthResponse {
   access_token: string;
@@ -71,31 +311,26 @@ export interface AuthResponse {
 
 export const authApi = {
   async register(email: string, password: string): Promise<AuthResponse> {
-    const res = await fetch(`${API_URL}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
+    const safeEmail = email.trim() || DEFAULT_EMAIL;
+    if (!password.trim()) {
+      throw new ApiError('Password is required', 400, 'password_required');
+    }
 
-    const data = await handleResponse<AuthResponse>(res);
-    setAccessToken(data.access_token);
-    return data;
+    return createLocalAuthResponse(safeEmail);
   },
 
   async login(email: string, password: string): Promise<AuthResponse> {
-    const res = await fetch(`${API_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
+    const safeEmail = email.trim() || readSession()?.user.email || DEFAULT_EMAIL;
+    if (!password.trim()) {
+      throw new ApiError('Password is required', 400, 'password_required');
+    }
 
-    const data = await handleResponse<AuthResponse>(res);
-    setAccessToken(data.access_token);
-    return data;
+    return createLocalAuthResponse(safeEmail);
   },
 
   logout(): void {
     setAccessToken(null);
+    writeSession(null);
   }
 };
 
@@ -121,42 +356,59 @@ export interface IntakeAddRequest {
 
 export const intakeApi = {
   async add(amountMl: number, category = 'water', intakeTime?: string): Promise<IntakeResponse> {
-    const body: IntakeAddRequest = {
-      amount_ml: amountMl,
-      category,
+    if (!Number.isFinite(amountMl) || amountMl <= 0) {
+      throw new ApiError('Invalid intake amount', 400, 'invalid_amount');
+    }
+
+    const state = await readDbState();
+    const intake: IntakeResponse = {
+      id: generateId(),
+      amount_ml: Math.round(amountMl),
+      category: category || 'water',
       intake_time: intakeTime || new Date().toISOString()
     };
 
-    const res = await fetch(`${API_URL}/intakes`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(body)
-    });
+    state.intakes.push(intake);
+    await writeDbState(state);
 
-    return handleResponse<IntakeResponse>(res);
+    return intake;
   },
 
   async list(from?: string, to?: string, page = 1, pageSize = 100): Promise<IntakeListResponse> {
-    const params = new URLSearchParams();
-    if (from) params.set('from', from);
-    if (to) params.set('to', to);
-    params.set('page', String(page));
-    params.set('page_size', String(pageSize));
+    const state = await readDbState();
+    const fromTime = from ? parseDateKey(from).getTime() : Number.NEGATIVE_INFINITY;
+    const toTime = to ? parseDateKey(to).getTime() : Number.POSITIVE_INFINITY;
 
-    const res = await fetch(`${API_URL}/intakes?${params.toString()}`, {
-      headers: authHeaders()
-    });
+    const filtered = state.intakes
+      .filter((item) => {
+        const ts = new Date(item.intake_time).getTime();
+        return ts >= fromTime && ts < toTime;
+      })
+      .sort((a, b) => new Date(b.intake_time).getTime() - new Date(a.intake_time).getTime());
 
-    return handleResponse<IntakeListResponse>(res);
+    const safePage = Math.max(1, Math.floor(page));
+    const safePageSize = Math.max(1, Math.floor(pageSize));
+    const total = filtered.length;
+    const start = (safePage - 1) * safePageSize;
+
+    return {
+      intakes: filtered.slice(start, start + safePageSize),
+      total,
+      page: safePage,
+      page_size: safePageSize
+    };
   },
 
   async delete(id: string): Promise<void> {
-    const res = await fetch(`${API_URL}/intakes/${id}`, {
-      method: 'DELETE',
-      headers: authHeaders()
-    });
+    const state = await readDbState();
+    const before = state.intakes.length;
+    state.intakes = state.intakes.filter((item) => item.id !== id);
 
-    await handleResponse<{ message: string }>(res);
+    if (state.intakes.length === before) {
+      throw new ApiError('Intake not found', 404, 'intake_not_found');
+    }
+
+    await writeDbState(state);
   }
 };
 
@@ -220,47 +472,216 @@ export interface HealthResponse {
 
 export const statsApi = {
   async getWeekly(weekStart?: string): Promise<WeeklyStatsResponse> {
-    const params = weekStart ? `?week_start=${encodeURIComponent(weekStart)}` : '';
-    const res = await fetch(`${API_URL}/stats/weekly${params}`, {
-      headers: authHeaders()
-    });
+    const state = await readDbState();
+    const goal = state.settings.daily_goal_ml > 0 ? state.settings.daily_goal_ml : DEFAULT_SETTINGS.daily_goal_ml;
+    const weekStartDate = getWeekStart(weekStart);
+    const totals = buildDailyTotals(state.intakes);
 
-    return handleResponse<WeeklyStatsResponse>(res);
+    const dailyData: DailyStatsData[] = [];
+    let totalMl = 0;
+    let daysLogged = 0;
+    let goalsMet = 0;
+
+    for (let i = 0; i < 7; i += 1) {
+      const current = new Date(weekStartDate);
+      current.setDate(weekStartDate.getDate() + i);
+      const key = toLocalDateKey(current);
+      const dayTotal = totals.get(key) || 0;
+      const met = dayTotal >= goal;
+
+      totalMl += dayTotal;
+      if (dayTotal > 0) {
+        daysLogged += 1;
+      }
+      if (met) {
+        goalsMet += 1;
+      }
+
+      dailyData.push({
+        stat_date: key,
+        total_ml: dayTotal,
+        is_goal_met: met,
+        streak_days: calculateStreakForDate(current, totals, goal)
+      });
+    }
+
+    return {
+      week_start: toLocalDateKey(weekStartDate),
+      total_ml: totalMl,
+      avg_daily: Math.round(totalMl / 7),
+      days_logged: daysLogged,
+      goals_met: goalsMet,
+      daily_data: dailyData
+    };
   },
 
   async getStreak(): Promise<StreakResponse> {
-    const res = await fetch(`${API_URL}/stats/streak`, {
-      headers: authHeaders()
-    });
+    const state = await readDbState();
+    const totals = buildDailyTotals(state.intakes);
+    const goal = state.settings.daily_goal_ml > 0 ? state.settings.daily_goal_ml : DEFAULT_SETTINGS.daily_goal_ml;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    return handleResponse<StreakResponse>(res);
+    return {
+      streak_days: calculateStreakForDate(today, totals, goal)
+    };
   },
 
   async getBestTime(days = 7): Promise<BestTimeResponse | null> {
-    const res = await fetch(`${API_URL}/stats/best-time?days=${days}`, {
-      headers: authHeaders()
+    const state = await readDbState();
+    const safeDays = clamp(Math.floor(days), 1, 365);
+
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - safeDays + 1);
+
+    const endTime = Date.now();
+    const startTime = start.getTime();
+    const relevant = state.intakes.filter((item) => {
+      const ts = new Date(item.intake_time).getTime();
+      return ts >= startTime && ts <= endTime;
     });
 
-    const data = await handleResponse<BestTimeResponse | BestTimeEmptyResponse>(res);
-    return 'message' in data ? null : data;
+    if (relevant.length === 0) {
+      return null;
+    }
+
+    const hourlyTotals = new Map<number, number>();
+    const activeDays = new Set<string>();
+
+    relevant.forEach((item) => {
+      const date = new Date(item.intake_time);
+      const hour = date.getHours();
+      hourlyTotals.set(hour, (hourlyTotals.get(hour) || 0) + item.amount_ml);
+      activeDays.add(toLocalDateKey(date));
+    });
+
+    let bestHour = 0;
+    let bestTotal = -1;
+    hourlyTotals.forEach((total, hour) => {
+      if (total > bestTotal) {
+        bestTotal = total;
+        bestHour = hour;
+      }
+    });
+
+    const daysWithData = Math.max(1, activeDays.size);
+    return {
+      best_hour: bestHour,
+      window: `${pad2(bestHour)}:00-${pad2((bestHour + 1) % 24)}:00`,
+      total_ml: bestTotal,
+      avg_ml: Math.round(bestTotal / daysWithData),
+      days: daysWithData
+    };
   },
 
   async getGaps(date: string, threshold = 240): Promise<GapsResponse> {
-    const res = await fetch(
-      `${API_URL}/stats/gaps?date=${encodeURIComponent(date)}&threshold=${threshold}`,
-      { headers: authHeaders() }
-    );
+    const state = await readDbState();
+    const safeThreshold = Math.max(1, Math.floor(threshold));
+    const bounds = getDayBounds(date);
+    const startMs = bounds.start.getTime();
+    const endMs = bounds.end.getTime();
 
-    return handleResponse<GapsResponse>(res);
+    const timestamps = state.intakes
+      .map((item) => new Date(item.intake_time).getTime())
+      .filter((ts) => ts >= startMs && ts < endMs)
+      .sort((a, b) => a - b);
+
+    if (timestamps.length === 0) {
+      return {
+        date: toLocalDateKey(bounds.start),
+        threshold_minutes: safeThreshold,
+        gaps: [],
+        longest_gap_minutes: 0
+      };
+    }
+
+    const points = [startMs, ...timestamps, endMs];
+    const gaps: GapInfo[] = [];
+    let longest = 0;
+
+    for (let i = 1; i < points.length; i += 1) {
+      const prev = points[i - 1];
+      const next = points[i];
+      const minutes = Math.round((next - prev) / 60000);
+
+      if (minutes > longest) {
+        longest = minutes;
+      }
+
+      if (minutes >= safeThreshold) {
+        gaps.push({
+          start: new Date(prev).toISOString(),
+          end: new Date(next).toISOString(),
+          minutes
+        });
+      }
+    }
+
+    return {
+      date: toLocalDateKey(bounds.start),
+      threshold_minutes: safeThreshold,
+      gaps,
+      longest_gap_minutes: longest
+    };
   },
 
   async getHealth(date: string, goal = 2000): Promise<HealthResponse> {
-    const res = await fetch(
-      `${API_URL}/stats/health?date=${encodeURIComponent(date)}&goal=${goal}`,
-      { headers: authHeaders() }
-    );
+    const state = await readDbState();
+    const bounds = getDayBounds(date);
+    const startMs = bounds.start.getTime();
+    const endMs = bounds.end.getTime();
 
-    return handleResponse<HealthResponse>(res);
+    const intakes = state.intakes
+      .filter((item) => {
+        const ts = new Date(item.intake_time).getTime();
+        return ts >= startMs && ts < endMs;
+      })
+      .sort((a, b) => new Date(a.intake_time).getTime() - new Date(b.intake_time).getTime());
+
+    const safeGoal = goal > 0 ? goal : DEFAULT_SETTINGS.daily_goal_ml;
+    const total = intakes.reduce((sum, item) => sum + item.amount_ml, 0);
+    const goalCompletion = clamp((total / safeGoal) * 100, 0, 100);
+
+    const uniqueCategories = new Set(intakes.map((item) => item.category));
+    const categoryDiversity = clamp((uniqueCategories.size / 4) * 100, 0, 100);
+
+    let regularity = 0;
+    let intervalUniformity = 0;
+
+    if (intakes.length >= 2) {
+      const intervals: number[] = [];
+      for (let i = 1; i < intakes.length; i += 1) {
+        const prev = new Date(intakes[i - 1].intake_time).getTime();
+        const next = new Date(intakes[i].intake_time).getTime();
+        intervals.push((next - prev) / 60000);
+      }
+
+      const longest = Math.max(...intervals);
+      regularity = clamp(100 - (longest / 360) * 100, 0, 100);
+
+      const mean = intervals.reduce((sum, value) => sum + value, 0) / intervals.length;
+      const variance = intervals.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / intervals.length;
+      const stdDev = Math.sqrt(variance);
+      const cv = mean === 0 ? 1 : stdDev / mean;
+      intervalUniformity = clamp(100 - cv * 100, 0, 100);
+    } else if (intakes.length === 1) {
+      regularity = 40;
+      intervalUniformity = 40;
+    }
+
+    const healthScore = Math.round((goalCompletion + regularity + categoryDiversity + intervalUniformity) / 4);
+
+    return {
+      date: toLocalDateKey(bounds.start),
+      health_score: healthScore,
+      breakdown: {
+        goal_completion: round1(goalCompletion),
+        regularity: round1(regularity),
+        category_diversity: round1(categoryDiversity),
+        interval_uniformity: round1(intervalUniformity)
+      }
+    };
   }
 };
 
@@ -286,27 +707,53 @@ export interface ProfileUpdateRequest {
 
 export const profileApi = {
   async get(): Promise<ProfileResponse> {
-    const res = await fetch(`${API_URL}/profile`, {
-      headers: authHeaders()
-    });
-
-    return handleResponse<ProfileResponse>(res);
+    const state = await readDbState();
+    return {
+      profile: state.profile,
+      recommended_ml: calculateRecommendedGoal(state.profile),
+      current_goal_ml: state.settings.daily_goal_ml
+    };
   },
 
   async update(profile: ProfileUpdateRequest): Promise<ProfileResponse> {
-    const res = await fetch(`${API_URL}/profile`, {
-      method: 'PUT',
-      headers: authHeaders(),
-      body: JSON.stringify(profile)
-    });
+    if (!Number.isFinite(profile.height_cm) || profile.height_cm <= 0) {
+      throw new ApiError('Invalid height', 400, 'invalid_height');
+    }
+    if (!Number.isFinite(profile.weight_kg) || profile.weight_kg <= 0) {
+      throw new ApiError('Invalid weight', 400, 'invalid_weight');
+    }
+    if (!Number.isFinite(profile.age) || profile.age <= 0) {
+      throw new ApiError('Invalid age', 400, 'invalid_age');
+    }
 
-    return handleResponse<ProfileResponse>(res);
+    const state = await readDbState();
+    state.profile = {
+      ...state.profile,
+      height_cm: Math.round(profile.height_cm),
+      weight_kg: round1(profile.weight_kg),
+      age: Math.round(profile.age)
+    };
+
+    if (profile.apply_recommend) {
+      state.settings.daily_goal_ml = calculateRecommendedGoal(state.profile);
+    }
+
+    await writeDbState(state);
+
+    return {
+      profile: state.profile,
+      recommended_ml: calculateRecommendedGoal(state.profile),
+      current_goal_ml: state.settings.daily_goal_ml
+    };
   }
 };
 
 export interface SettingsResponse {
   daily_goal_ml: number;
   reminder_intensity: number;
+  reminder_enabled: boolean;
+  reminder_interval_minutes: number;
+  quiet_hours_enabled: boolean;
   quiet_hours_start: string;
   quiet_hours_end: string;
 }
@@ -314,57 +761,78 @@ export interface SettingsResponse {
 export interface SettingsUpdateRequest {
   daily_goal_ml?: number;
   reminder_intensity?: number;
+  reminder_enabled?: boolean;
+  reminder_interval_minutes?: number;
+  quiet_hours_enabled?: boolean;
   quiet_hours_start?: string;
   quiet_hours_end?: string;
 }
 
 export const settingsApi = {
   async get(): Promise<SettingsResponse> {
-    const res = await fetch(`${API_URL}/settings`, {
-      headers: authHeaders()
-    });
-
-    return handleResponse<SettingsResponse>(res);
+    return (await readDbState()).settings;
   },
 
   async update(settings: SettingsUpdateRequest): Promise<SettingsResponse> {
-    const res = await fetch(`${API_URL}/settings`, {
-      method: 'PUT',
-      headers: authHeaders(),
-      body: JSON.stringify(settings)
-    });
+    const state = await readDbState();
 
-    return handleResponse<SettingsResponse>(res);
+    if (settings.daily_goal_ml !== undefined) {
+      if (!Number.isFinite(settings.daily_goal_ml) || settings.daily_goal_ml <= 0) {
+        throw new ApiError('Invalid daily goal', 400, 'invalid_daily_goal');
+      }
+      state.settings.daily_goal_ml = Math.round(settings.daily_goal_ml);
+    }
+
+    if (settings.reminder_intensity !== undefined) {
+      if (!Number.isFinite(settings.reminder_intensity) || settings.reminder_intensity < 0) {
+        throw new ApiError('Invalid reminder intensity', 400, 'invalid_reminder_intensity');
+      }
+      state.settings.reminder_intensity = Math.round(settings.reminder_intensity);
+    }
+
+    if (settings.reminder_enabled !== undefined) {
+      if (typeof settings.reminder_enabled !== 'boolean') {
+        throw new ApiError('Invalid reminder enabled flag', 400, 'invalid_reminder_enabled');
+      }
+      state.settings.reminder_enabled = settings.reminder_enabled;
+    }
+
+    if (settings.reminder_interval_minutes !== undefined) {
+      if (!Number.isFinite(settings.reminder_interval_minutes)) {
+        throw new ApiError('Invalid reminder interval', 400, 'invalid_reminder_interval');
+      }
+
+      const rounded = Math.round(settings.reminder_interval_minutes);
+      if (rounded < 15 || rounded > 720) {
+        throw new ApiError('Reminder interval out of range', 400, 'invalid_reminder_interval');
+      }
+      state.settings.reminder_interval_minutes = rounded;
+    }
+
+    if (settings.quiet_hours_enabled !== undefined) {
+      if (typeof settings.quiet_hours_enabled !== 'boolean') {
+        throw new ApiError('Invalid quiet hours enabled flag', 400, 'invalid_quiet_hours_enabled');
+      }
+      state.settings.quiet_hours_enabled = settings.quiet_hours_enabled;
+    }
+
+    if (settings.quiet_hours_start !== undefined) {
+      if (!isValidTimeString(settings.quiet_hours_start)) {
+        throw new ApiError('Invalid quiet hours start', 400, 'invalid_quiet_hours_start');
+      }
+      state.settings.quiet_hours_start = settings.quiet_hours_start;
+    }
+
+    if (settings.quiet_hours_end !== undefined) {
+      if (!isValidTimeString(settings.quiet_hours_end)) {
+        throw new ApiError('Invalid quiet hours end', 400, 'invalid_quiet_hours_end');
+      }
+      state.settings.quiet_hours_end = settings.quiet_hours_end;
+    }
+
+    await writeDbState(state);
+    return state.settings;
   }
 };
 
-export const isAuthenticated = (): boolean => Boolean(getAccessToken());
-
-export const getWebSocketBaseUrl = (): string => {
-  const explicit = (import.meta.env.VITE_WS_URL as string | undefined)?.trim();
-  if (explicit) {
-    return explicit.replace(/\/+$/, '');
-  }
-
-  if (typeof window === 'undefined') {
-    return 'ws://localhost:8080';
-  }
-
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}`;
-};
-
-export const getWebSocketToken = (): string | null => {
-  const explicit = ((import.meta.env.VITE_WS_TOKEN as string | undefined) || '').trim();
-  if (explicit) {
-    return explicit;
-  }
-
-  return getAccessToken();
-};
-
-export const getWebSocketUserId = (): string | null => {
-  const explicit = ((import.meta.env.VITE_WS_USER_ID as string | undefined) || '').trim();
-  return explicit || null;
-};
-
+export const isAuthenticated = (): boolean => true;

@@ -1,21 +1,66 @@
 /**
- * Notification bridge for websocket reminders.
+ * Local notification utilities (no websocket dependency).
  */
 
-import { wsClient, ReminderPayload, WebSocketMessage } from './websocket';
+export type ScheduleEvery = 'year' | 'month' | 'two-weeks' | 'week' | 'day' | 'hour' | 'minute' | 'second';
 
-interface LocalNotificationSchema {
+export interface LocalNotificationSchedule {
+  at?: Date;
+  repeats?: boolean;
+  allowWhileIdle?: boolean;
+  on?: {
+    year?: number;
+    month?: number;
+    day?: number;
+    weekday?: number;
+    hour?: number;
+    minute?: number;
+    second?: number;
+  };
+  every?: ScheduleEvery;
+  count?: number;
+}
+
+export interface LocalNotificationSchema {
   title: string;
   body: string;
   id: number;
   sound?: string;
   extra?: unknown;
+  channelId?: string;
+  schedule?: LocalNotificationSchedule;
+}
+
+interface LocalNotificationChannel {
+  id: string;
+  name: string;
+  description?: string;
+  importance?: number;
+  visibility?: number;
+  vibration?: boolean;
+  lights?: boolean;
+  sound?: string;
 }
 
 interface LocalNotificationsPlugin {
   schedule(options: { notifications: LocalNotificationSchema[] }): Promise<void>;
+  cancel(options: { notifications: Array<{ id: number }> }): Promise<void>;
+  createChannel(channel: LocalNotificationChannel): Promise<void>;
   requestPermissions(): Promise<{ display: string }>;
   checkPermissions(): Promise<{ display: string }>;
+}
+
+export interface ReminderPayload {
+  title: string;
+  body: string;
+  current_ml: number;
+  goal_ml: number;
+  timestamp: number;
+}
+
+export interface ReminderEvent {
+  type: 'connected' | 'disconnected' | 'error';
+  payload: unknown;
 }
 
 export type NotificationPermissionState = NotificationPermission | 'unsupported';
@@ -23,11 +68,14 @@ export type NotificationPermissionState = NotificationPermission | 'unsupported'
 export interface ReminderServiceCallbacks {
   onReminder?: (payload: ReminderPayload) => void;
   onConnectionChange?: (connected: boolean) => void;
-  onConnectionEvent?: (message: WebSocketMessage) => void;
+  onConnectionEvent?: (message: ReminderEvent) => void;
 }
+
+export const SYSTEM_REMINDER_CHANNEL_ID = 'hydration-reminders';
 
 let LocalNotifications: LocalNotificationsPlugin | null = null;
 let localNotificationId = 1;
+let reminderConnected = false;
 let reminderCleanup: (() => void) | null = null;
 
 async function initCapacitorNotifications(): Promise<void> {
@@ -81,10 +129,48 @@ export async function initNotifications(): Promise<boolean> {
   return permission === 'granted';
 }
 
+export async function ensureReminderChannel(): Promise<void> {
+  await initCapacitorNotifications();
+  if (!LocalNotifications || typeof LocalNotifications.createChannel !== 'function') {
+    return;
+  }
+
+  await LocalNotifications.createChannel({
+    id: SYSTEM_REMINDER_CHANNEL_ID,
+    name: 'Hydration Reminders',
+    description: 'Scheduled hydration reminder alerts',
+    importance: 4,
+    vibration: true
+  });
+}
+
+export async function scheduleNotifications(notifications: LocalNotificationSchema[]): Promise<boolean> {
+  await initCapacitorNotifications();
+  if (!LocalNotifications || notifications.length === 0) {
+    return false;
+  }
+
+  await LocalNotifications.schedule({ notifications });
+  return true;
+}
+
+export async function cancelNotifications(ids: number[]): Promise<boolean> {
+  await initCapacitorNotifications();
+  if (!LocalNotifications || ids.length === 0) {
+    return false;
+  }
+
+  await LocalNotifications.cancel({
+    notifications: ids.map((id) => ({ id }))
+  });
+  return true;
+}
+
 export async function showNotification(title: string, body: string, extra?: unknown): Promise<boolean> {
   await initCapacitorNotifications();
 
   if (LocalNotifications) {
+    await ensureReminderChannel();
     await LocalNotifications.schedule({
       notifications: [
         {
@@ -92,6 +178,7 @@ export async function showNotification(title: string, body: string, extra?: unkn
           title,
           body,
           sound: 'default',
+          channelId: SYSTEM_REMINDER_CHANNEL_ID,
           extra
         }
       ]
@@ -115,24 +202,9 @@ export async function showNotification(title: string, body: string, extra?: unkn
   return true;
 }
 
-function isReminderPayload(value: unknown): value is ReminderPayload {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const payload = value as Partial<ReminderPayload>;
-  return (
-    typeof payload.title === 'string' &&
-    typeof payload.body === 'string' &&
-    typeof payload.current_ml === 'number' &&
-    typeof payload.goal_ml === 'number' &&
-    typeof payload.timestamp === 'number'
-  );
-}
-
 export function connectReminderService(
-  token: string,
-  userId: string,
+  _token: string | null,
+  _userId: string | null,
   callbacks: ReminderServiceCallbacks = {}
 ): () => void {
   if (reminderCleanup) {
@@ -140,57 +212,14 @@ export function connectReminderService(
     reminderCleanup = null;
   }
 
-  const handleReminder = async (message: WebSocketMessage) => {
-    if (!isReminderPayload(message.payload)) {
-      return;
-    }
-
-    const payload = message.payload;
-    callbacks.onReminder?.(payload);
-
-    await showNotification(payload.title, payload.body, {
-      current_ml: payload.current_ml,
-      goal_ml: payload.goal_ml,
-      timestamp: payload.timestamp
-    });
-
-    wsClient.ackReminder();
-  };
-
-  const handleConnected = (message: WebSocketMessage) => {
-    callbacks.onConnectionChange?.(true);
-    callbacks.onConnectionEvent?.(message);
-  };
-
-  const handleDisconnected = (message: WebSocketMessage) => {
-    callbacks.onConnectionChange?.(false);
-    callbacks.onConnectionEvent?.(message);
-  };
-
-  const handleReconnect = (message: WebSocketMessage) => {
-    callbacks.onConnectionChange?.(false);
-    callbacks.onConnectionEvent?.(message);
-  };
-
-  const handleError = (message: WebSocketMessage) => {
-    callbacks.onConnectionEvent?.(message);
-  };
-
-  wsClient.on('reminder', handleReminder);
-  wsClient.on('connected', handleConnected);
-  wsClient.on('disconnected', handleDisconnected);
-  wsClient.on('reconnecting', handleReconnect);
-  wsClient.on('error', handleError);
-
-  wsClient.connect(token, userId);
+  reminderConnected = true;
+  callbacks.onConnectionChange?.(true);
+  callbacks.onConnectionEvent?.({ type: 'connected', payload: { mode: 'local' } });
 
   const cleanup = () => {
-    wsClient.off('reminder', handleReminder);
-    wsClient.off('connected', handleConnected);
-    wsClient.off('disconnected', handleDisconnected);
-    wsClient.off('reconnecting', handleReconnect);
-    wsClient.off('error', handleError);
-    wsClient.disconnect();
+    reminderConnected = false;
+    callbacks.onConnectionChange?.(false);
+    callbacks.onConnectionEvent?.({ type: 'disconnected', payload: { mode: 'local' } });
   };
 
   reminderCleanup = cleanup;
@@ -204,12 +233,9 @@ export function disconnectReminderService(): void {
     return;
   }
 
-  wsClient.disconnect();
+  reminderConnected = false;
 }
 
 export function isReminderServiceConnected(): boolean {
-  return wsClient.isConnected;
+  return reminderConnected;
 }
-
-
-

@@ -12,6 +12,8 @@ import { SplashScreen } from './components/SplashScreen';
 import {
   ApiError,
   intakeApi,
+  initializeLocalDataLayer,
+  getLocalDataLayerHealth,
   profileApi,
   settingsApi,
   statsApi,
@@ -23,17 +25,15 @@ import {
   HealthResponse,
   ProfileResponse,
   SettingsResponse,
-  SettingsUpdateRequest,
-  getWebSocketToken,
-  getWebSocketUserId
+  SettingsUpdateRequest
 } from './api';
 import {
   connectReminderService,
-  disconnectReminderService,
   ensureNotificationPermission,
   getNotificationPermissionState,
   NotificationPermissionState
 } from './services/notifications';
+import { notificationService } from './services/notificationService';
 
 const DEFAULT_DRINKS: DrinkOption[] = [
   { id: '1', label: '一杯水', amount: 250, category: 'water', iconId: 'droplet', colorClass: 'bg-[#e0f7fa] text-[#00bcd4]' },
@@ -129,6 +129,7 @@ const loadDrinkOptions = (): DrinkOption[] => {
 
 const App: React.FC = () => {
   const [showSplash, setShowSplash] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>(Page.HOME);
 
   const [drinkOptions, setDrinkOptions] = useState<DrinkOption[]>(() => loadDrinkOptions());
@@ -168,13 +169,37 @@ const App: React.FC = () => {
     [profileData, settingsData, todayIntakes, streakData, weeklyData]
   );
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setShowSplash(false);
-    }, 2500);
+  const bootstrapApp = useCallback(async () => {
+    setInitError(null);
+    const minDelay = new Promise<void>((resolve) => {
+      window.setTimeout(resolve, 2500);
+    });
 
-    return () => window.clearTimeout(timer);
+    try {
+      await Promise.all([initializeLocalDataLayer(), minDelay]);
+      setShowSplash(false);
+    } catch {
+      const health = getLocalDataLayerHealth();
+      setInitError(health.lastError ? `本地初始化失败: ${health.lastError}` : '本地初始化失败');
+    }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      await bootstrapApp();
+      if (cancelled) {
+        return;
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bootstrapApp]);
 
   useEffect(() => {
     window.localStorage.setItem(DRINK_OPTIONS_KEY, JSON.stringify(drinkOptions));
@@ -340,21 +365,22 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleRequestNotificationPermission = useCallback(async () => {
+  const handleRequestNotificationPermission = useCallback(async (): Promise<NotificationPermissionState> => {
     const permission = await ensureNotificationPermission();
     setNotificationPermission(permission);
+    return permission;
   }, []);
 
   useEffect(() => {
-    const token = getWebSocketToken();
-    const userId = getWebSocketUserId() || profileData?.profile.user_id || null;
-
-    if (!token || !userId) {
-      setWsConnected(false);
+    if (!settingsData) {
       return;
     }
 
-    const disconnect = connectReminderService(token, userId, {
+    void notificationService.syncIntervalReminder(settingsData);
+  }, [settingsData]);
+
+  useEffect(() => {
+    const disconnect = connectReminderService(null, profileData?.profile.user_id || null, {
       onConnectionChange: (connected) => setWsConnected(connected)
     });
 
@@ -363,6 +389,25 @@ const App: React.FC = () => {
       setWsConnected(false);
     };
   }, [profileData?.profile.user_id]);
+
+  if (showSplash && initError) {
+    return (
+      <div className="w-full h-screen bg-[#fbffff] flex items-center justify-center p-6">
+        <div className="w-full max-w-sm bg-white border border-red-100 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] p-5 text-center">
+          <p className="text-sm text-red-500">{initError}</p>
+          <button
+            onClick={() => {
+              setShowSplash(true);
+              bootstrapApp();
+            }}
+            className="mt-4 px-4 py-2 rounded-full bg-[#0dc792] text-white text-sm font-semibold"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const renderPage = () => {
     switch (currentPage) {
