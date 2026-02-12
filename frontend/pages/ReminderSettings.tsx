@@ -26,10 +26,19 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({ onBack }) =>
         minutes: 60
     });
 
-    const toggleInterval = () => {
+    const toggleInterval = async () => {
         const newState = !intervalConfig.enabled;
+        if (newState) {
+            const granted = await notificationService.requestPermission();
+            if (!granted) {
+                setIntervalConfig(prev => ({ ...prev, enabled: false }));
+                notificationService.cancelNotification('default-interval');
+                return;
+            }
+        }
+
         setIntervalConfig(prev => ({ ...prev, enabled: newState }));
-        
+
         if (newState) {
             notificationService.startRecurringNotification(
                 'default-interval', 

@@ -1,108 +1,96 @@
-
 import { DoNotDisturbConfig } from '../types';
+import { ensureNotificationPermission, getNotificationPermissionState, showNotification } from './notifications';
 
 class NotificationService {
-    private dndConfig: DoNotDisturbConfig = {
-        enabled: false,
-        start: '23:00',
-        end: '07:00'
-    };
-    
-    // Simple simulated scheduler
-    private scheduledTimeouts: Map<string, number> = new Map();
+  private dndConfig: DoNotDisturbConfig = {
+    enabled: false,
+    start: '23:00',
+    end: '07:00'
+  };
 
-    constructor() {
-        this.requestPermission();
+  private scheduledTimeouts: Map<string, number> = new Map();
+
+  constructor() {
+    void this.requestPermission();
+  }
+
+  async requestPermission(): Promise<boolean> {
+    const result = await ensureNotificationPermission();
+    return result === 'granted';
+  }
+
+  setDoNotDisturb(config: DoNotDisturbConfig): void {
+    this.dndConfig = config;
+  }
+
+  isInDoNotDisturb(date: Date = new Date()): boolean {
+    if (!this.dndConfig.enabled) {
+      return false;
     }
 
-    async requestPermission() {
-        if (!('Notification' in window)) {
-            console.log('This browser does not support desktop notification');
-            return;
-        }
-        
-        if (Notification.permission !== 'denied') {
-            await Notification.requestPermission();
-        }
+    const nowMinutes = date.getHours() * 60 + date.getMinutes();
+    const [startH, startM] = this.dndConfig.start.split(':').map(Number);
+    const [endH, endM] = this.dndConfig.end.split(':').map(Number);
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+
+    if (startMinutes > endMinutes) {
+      return nowMinutes >= startMinutes || nowMinutes <= endMinutes;
     }
 
-    setDoNotDisturb(config: DoNotDisturbConfig) {
-        this.dndConfig = config;
+    return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
+  }
+
+  scheduleNotification(id: string, title: string, body: string, delayMs: number): void {
+    this.cancelNotification(id);
+
+    const timeoutId = window.setTimeout(async () => {
+      if (!this.isInDoNotDisturb()) {
+        await this.dispatch(title, body, { source: 'single' });
+      }
+
+      this.scheduledTimeouts.delete(id);
+    }, delayMs);
+
+    this.scheduledTimeouts.set(id, timeoutId);
+  }
+
+  startRecurringNotification(id: string, title: string, body: string, intervalMs: number): void {
+    this.cancelNotification(id);
+
+    const intervalId = window.setInterval(async () => {
+      if (this.isInDoNotDisturb()) {
+        return;
+      }
+
+      await this.dispatch(title, body, { source: 'recurring' });
+    }, intervalMs);
+
+    this.scheduledTimeouts.set(id, intervalId);
+  }
+
+  cancelNotification(id: string): void {
+    const handle = this.scheduledTimeouts.get(id);
+    if (handle === undefined) {
+      return;
     }
 
-    isInDoNotDisturb(date: Date = new Date()): boolean {
-        if (!this.dndConfig.enabled) return false;
+    window.clearTimeout(handle);
+    window.clearInterval(handle);
+    this.scheduledTimeouts.delete(id);
+  }
 
-        const nowMinutes = date.getHours() * 60 + date.getMinutes();
-        
-        const [startH, startM] = this.dndConfig.start.split(':').map(Number);
-        const startMinutes = startH * 60 + startM;
-        
-        const [endH, endM] = this.dndConfig.end.split(':').map(Number);
-        const endMinutes = endH * 60 + endM;
-
-        if (startMinutes > endMinutes) {
-            // Span midnight (e.g. 23:00 - 07:00)
-            return nowMinutes >= startMinutes || nowMinutes <= endMinutes;
-        } else {
-            // Same day (e.g. 13:00 - 14:00)
-            return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
-        }
+  private async dispatch(title: string, body: string, extra?: unknown): Promise<void> {
+    const permission = getNotificationPermissionState();
+    if (permission !== 'granted') {
+      const requested = await ensureNotificationPermission();
+      if (requested !== 'granted') {
+        return;
+      }
     }
 
-    scheduleNotification(id: string, title: string, body: string, delayMs: number) {
-        // Clear existing if any
-        if (this.scheduledTimeouts.has(id)) {
-            window.clearTimeout(this.scheduledTimeouts.get(id));
-        }
-
-        const timeoutId = window.setTimeout(() => {
-            if (this.isInDoNotDisturb()) {
-                console.log('Notification suppressed due to DND');
-                return;
-            }
-
-            if (Notification.permission === 'granted') {
-                new Notification(title, { body, icon: '/vite.svg' });
-            } else {
-                console.log(`${title}: ${body}`); // alert is too intrusive for intervals, use log or proper notification
-            }
-            
-            this.scheduledTimeouts.delete(id);
-        }, delayMs);
-
-        this.scheduledTimeouts.set(id, timeoutId);
-    }
-
-    startRecurringNotification(id: string, title: string, body: string, intervalMs: number) {
-        this.cancelNotification(id); // Clear existing
-
-        const intervalId = window.setInterval(() => {
-             if (this.isInDoNotDisturb()) {
-                console.log('Recurring notification suppressed due to DND');
-                return;
-            }
-
-            if (Notification.permission === 'granted') {
-                new Notification(title, { body, icon: '/vite.svg' });
-            } else {
-                 console.log(`[Recurring] ${title}: ${body}`);
-            }
-        }, intervalMs);
-
-        this.scheduledTimeouts.set(id, intervalId);
-    }
-
-    cancelNotification(id: string) {
-        if (this.scheduledTimeouts.has(id)) {
-            // Check if it's interval or timeout (clearInterval works for both in many envs, but let's be safe if strictly typed, though JS treats ids similarly)
-            // In browser, clearTimeout and clearInterval are technically interchangeable for IDs but good practice to distinct if possible.
-            // Here we store both in same map.
-            window.clearTimeout(this.scheduledTimeouts.get(id)); 
-            window.clearInterval(this.scheduledTimeouts.get(id));
-            this.scheduledTimeouts.delete(id);
-        }
-    }
+    await showNotification(title, body, extra);
+  }
 }
 
 export const notificationService = new NotificationService();
