@@ -11,6 +11,9 @@ export interface StoredProfile {
 export interface StoredSettings {
   daily_goal_ml: number;
   reminder_intensity: number;
+  reminder_enabled: boolean;
+  reminder_interval_minutes: number;
+  quiet_hours_enabled: boolean;
   quiet_hours_start: string;
   quiet_hours_end: string;
 }
@@ -37,6 +40,8 @@ export interface LocalDbHealth {
 const LEGACY_STATE_KEY = 'hydratemate_local_db_v1';
 const SQLITE_DB_NAME = 'hydratemate_local';
 const SQLITE_MIGRATION_MARKER = 'legacy_localstorage_migrated_v1';
+const MIN_REMINDER_INTERVAL_MINUTES = 15;
+const MAX_REMINDER_INTERVAL_MINUTES = 720;
 
 const canUseLocalStorage = (): boolean => typeof window !== 'undefined' && !!window.localStorage;
 
@@ -50,6 +55,32 @@ const parseJson = <T>(raw: string | null): T | null => {
   } catch {
     return null;
   }
+};
+
+const normalizeIntervalMinutes = (value: unknown, fallback: number): number => {
+  const candidate = Number(value);
+  if (!Number.isFinite(candidate)) {
+    return fallback;
+  }
+
+  const rounded = Math.round(candidate);
+  if (rounded < MIN_REMINDER_INTERVAL_MINUTES) {
+    return MIN_REMINDER_INTERVAL_MINUTES;
+  }
+  if (rounded > MAX_REMINDER_INTERVAL_MINUTES) {
+    return MAX_REMINDER_INTERVAL_MINUTES;
+  }
+  return rounded;
+};
+
+const normalizeBoolean = (value: unknown, fallback: boolean): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  return fallback;
 };
 
 const isValidIntake = (value: unknown): value is StoredIntake => {
@@ -94,6 +125,12 @@ const normalizeState = (value: unknown, defaults: StoredState): StoredState => {
       reminder_intensity: Number.isFinite(settings.reminder_intensity)
         ? Number(settings.reminder_intensity)
         : defaults.settings.reminder_intensity,
+      reminder_enabled: normalizeBoolean(settings.reminder_enabled, defaults.settings.reminder_enabled),
+      reminder_interval_minutes: normalizeIntervalMinutes(
+        settings.reminder_interval_minutes,
+        defaults.settings.reminder_interval_minutes
+      ),
+      quiet_hours_enabled: normalizeBoolean(settings.quiet_hours_enabled, defaults.settings.quiet_hours_enabled),
       quiet_hours_start:
         typeof settings.quiet_hours_start === 'string'
           ? settings.quiet_hours_start
@@ -220,6 +257,9 @@ class LocalDbStore {
         id INTEGER PRIMARY KEY CHECK (id = 1),
         daily_goal_ml INTEGER NOT NULL,
         reminder_intensity INTEGER NOT NULL,
+        reminder_enabled INTEGER NOT NULL DEFAULT 0,
+        reminder_interval_minutes INTEGER NOT NULL DEFAULT 60,
+        quiet_hours_enabled INTEGER NOT NULL DEFAULT 1,
         quiet_hours_start TEXT NOT NULL,
         quiet_hours_end TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -236,6 +276,7 @@ class LocalDbStore {
         value TEXT NOT NULL
       );
     `);
+    await this.ensureSettingsColumns(defaults);
 
     const profileRows = (await db.query('SELECT user_id FROM profile LIMIT 1;')).values || [];
     if (profileRows.length === 0) {
@@ -254,14 +295,47 @@ class LocalDbStore {
     const settingsRows = (await db.query('SELECT id FROM settings WHERE id = 1;')).values || [];
     if (settingsRows.length === 0) {
       await db.run(
-        'INSERT INTO settings (id, daily_goal_ml, reminder_intensity, quiet_hours_start, quiet_hours_end, updated_at) VALUES (1, ?, ?, ?, ?, ?);',
+        'INSERT INTO settings (id, daily_goal_ml, reminder_intensity, reminder_enabled, reminder_interval_minutes, quiet_hours_enabled, quiet_hours_start, quiet_hours_end, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?);',
         [
           defaults.settings.daily_goal_ml,
           defaults.settings.reminder_intensity,
+          defaults.settings.reminder_enabled ? 1 : 0,
+          defaults.settings.reminder_interval_minutes,
+          defaults.settings.quiet_hours_enabled ? 1 : 0,
           defaults.settings.quiet_hours_start,
           defaults.settings.quiet_hours_end,
           new Date().toISOString()
         ]
+      );
+    }
+  }
+
+  private async ensureSettingsColumns(defaults: StoredState): Promise<void> {
+    const db = this.getDb();
+    const tableInfoRows = (await db.query('PRAGMA table_info(settings);')).values || [];
+    const existingColumns = new Set(
+      tableInfoRows
+        .map((row) => (row && typeof row === 'object' ? (row as { name?: unknown }).name : undefined))
+        .filter((name): name is string => typeof name === 'string')
+    );
+
+    if (!existingColumns.has('reminder_enabled')) {
+      await db.execute(
+        `ALTER TABLE settings ADD COLUMN reminder_enabled INTEGER NOT NULL DEFAULT ${
+          defaults.settings.reminder_enabled ? 1 : 0
+        };`
+      );
+    }
+    if (!existingColumns.has('reminder_interval_minutes')) {
+      await db.execute(
+        `ALTER TABLE settings ADD COLUMN reminder_interval_minutes INTEGER NOT NULL DEFAULT ${defaults.settings.reminder_interval_minutes};`
+      );
+    }
+    if (!existingColumns.has('quiet_hours_enabled')) {
+      await db.execute(
+        `ALTER TABLE settings ADD COLUMN quiet_hours_enabled INTEGER NOT NULL DEFAULT ${
+          defaults.settings.quiet_hours_enabled ? 1 : 0
+        };`
       );
     }
   }
@@ -311,7 +385,7 @@ class LocalDbStore {
     ).values || [];
     const settingsRows = (
       await db.query(
-        'SELECT daily_goal_ml, reminder_intensity, quiet_hours_start, quiet_hours_end FROM settings WHERE id = 1 LIMIT 1;'
+        'SELECT daily_goal_ml, reminder_intensity, reminder_enabled, reminder_interval_minutes, quiet_hours_enabled, quiet_hours_start, quiet_hours_end FROM settings WHERE id = 1 LIMIT 1;'
       )
     ).values || [];
     const intakeRows = (
@@ -332,6 +406,15 @@ class LocalDbStore {
         settings: {
           daily_goal_ml: Number(settingsRow.daily_goal_ml),
           reminder_intensity: Number(settingsRow.reminder_intensity),
+          reminder_enabled: normalizeBoolean(settingsRow.reminder_enabled, defaults.settings.reminder_enabled),
+          reminder_interval_minutes: normalizeIntervalMinutes(
+            settingsRow.reminder_interval_minutes,
+            defaults.settings.reminder_interval_minutes
+          ),
+          quiet_hours_enabled: normalizeBoolean(
+            settingsRow.quiet_hours_enabled,
+            defaults.settings.quiet_hours_enabled
+          ),
           quiet_hours_start: settingsRow.quiet_hours_start,
           quiet_hours_end: settingsRow.quiet_hours_end
         },
@@ -366,10 +449,13 @@ class LocalDbStore {
       );
 
       await db.run(
-        'INSERT OR REPLACE INTO settings (id, daily_goal_ml, reminder_intensity, quiet_hours_start, quiet_hours_end, updated_at) VALUES (1, ?, ?, ?, ?, ?);',
+        'INSERT OR REPLACE INTO settings (id, daily_goal_ml, reminder_intensity, reminder_enabled, reminder_interval_minutes, quiet_hours_enabled, quiet_hours_start, quiet_hours_end, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?);',
         [
           nextState.settings.daily_goal_ml,
           nextState.settings.reminder_intensity,
+          nextState.settings.reminder_enabled ? 1 : 0,
+          nextState.settings.reminder_interval_minutes,
+          nextState.settings.quiet_hours_enabled ? 1 : 0,
           nextState.settings.quiet_hours_start,
           nextState.settings.quiet_hours_end,
           nowIso
@@ -408,4 +494,3 @@ export const readLocalDbState = async (defaults: StoredState): Promise<StoredSta
 export const writeLocalDbState = async (state: StoredState, defaults: StoredState): Promise<void> =>
   store.writeState(state, defaults);
 export const getLocalDbHealth = (): LocalDbHealth => store.getHealth();
-

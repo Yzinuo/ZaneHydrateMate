@@ -33,6 +33,7 @@ import {
   getNotificationPermissionState,
   NotificationPermissionState
 } from './services/notifications';
+import { notificationService } from './services/notificationService';
 
 const DEFAULT_DRINKS: DrinkOption[] = [
   { id: '1', label: '一杯水', amount: 250, category: 'water', iconId: 'droplet', colorClass: 'bg-[#e0f7fa] text-[#00bcd4]' },
@@ -364,10 +365,19 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleRequestNotificationPermission = useCallback(async () => {
+  const handleRequestNotificationPermission = useCallback(async (): Promise<NotificationPermissionState> => {
     const permission = await ensureNotificationPermission();
     setNotificationPermission(permission);
+    return permission;
   }, []);
+
+  useEffect(() => {
+    if (!settingsData) {
+      return;
+    }
+
+    void notificationService.syncIntervalReminder(settingsData);
+  }, [settingsData]);
 
   useEffect(() => {
     const disconnect = connectReminderService(null, profileData?.profile.user_id || null, {

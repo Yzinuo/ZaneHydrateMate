@@ -2,16 +2,50 @@
  * Local notification utilities (no websocket dependency).
  */
 
-interface LocalNotificationSchema {
+export type ScheduleEvery = 'year' | 'month' | 'two-weeks' | 'week' | 'day' | 'hour' | 'minute' | 'second';
+
+export interface LocalNotificationSchedule {
+  at?: Date;
+  repeats?: boolean;
+  allowWhileIdle?: boolean;
+  on?: {
+    year?: number;
+    month?: number;
+    day?: number;
+    weekday?: number;
+    hour?: number;
+    minute?: number;
+    second?: number;
+  };
+  every?: ScheduleEvery;
+  count?: number;
+}
+
+export interface LocalNotificationSchema {
   title: string;
   body: string;
   id: number;
   sound?: string;
   extra?: unknown;
+  channelId?: string;
+  schedule?: LocalNotificationSchedule;
+}
+
+interface LocalNotificationChannel {
+  id: string;
+  name: string;
+  description?: string;
+  importance?: number;
+  visibility?: number;
+  vibration?: boolean;
+  lights?: boolean;
+  sound?: string;
 }
 
 interface LocalNotificationsPlugin {
   schedule(options: { notifications: LocalNotificationSchema[] }): Promise<void>;
+  cancel(options: { notifications: Array<{ id: number }> }): Promise<void>;
+  createChannel(channel: LocalNotificationChannel): Promise<void>;
   requestPermissions(): Promise<{ display: string }>;
   checkPermissions(): Promise<{ display: string }>;
 }
@@ -36,6 +70,8 @@ export interface ReminderServiceCallbacks {
   onConnectionChange?: (connected: boolean) => void;
   onConnectionEvent?: (message: ReminderEvent) => void;
 }
+
+export const SYSTEM_REMINDER_CHANNEL_ID = 'hydration-reminders';
 
 let LocalNotifications: LocalNotificationsPlugin | null = null;
 let localNotificationId = 1;
@@ -93,10 +129,48 @@ export async function initNotifications(): Promise<boolean> {
   return permission === 'granted';
 }
 
+export async function ensureReminderChannel(): Promise<void> {
+  await initCapacitorNotifications();
+  if (!LocalNotifications || typeof LocalNotifications.createChannel !== 'function') {
+    return;
+  }
+
+  await LocalNotifications.createChannel({
+    id: SYSTEM_REMINDER_CHANNEL_ID,
+    name: 'Hydration Reminders',
+    description: 'Scheduled hydration reminder alerts',
+    importance: 4,
+    vibration: true
+  });
+}
+
+export async function scheduleNotifications(notifications: LocalNotificationSchema[]): Promise<boolean> {
+  await initCapacitorNotifications();
+  if (!LocalNotifications || notifications.length === 0) {
+    return false;
+  }
+
+  await LocalNotifications.schedule({ notifications });
+  return true;
+}
+
+export async function cancelNotifications(ids: number[]): Promise<boolean> {
+  await initCapacitorNotifications();
+  if (!LocalNotifications || ids.length === 0) {
+    return false;
+  }
+
+  await LocalNotifications.cancel({
+    notifications: ids.map((id) => ({ id }))
+  });
+  return true;
+}
+
 export async function showNotification(title: string, body: string, extra?: unknown): Promise<boolean> {
   await initCapacitorNotifications();
 
   if (LocalNotifications) {
+    await ensureReminderChannel();
     await LocalNotifications.schedule({
       notifications: [
         {
@@ -104,6 +178,7 @@ export async function showNotification(title: string, body: string, extra?: unkn
           title,
           body,
           sound: 'default',
+          channelId: SYSTEM_REMINDER_CHANNEL_ID,
           extra
         }
       ]
@@ -164,4 +239,3 @@ export function disconnectReminderService(): void {
 export function isReminderServiceConnected(): boolean {
   return reminderConnected;
 }
-

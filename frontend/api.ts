@@ -12,6 +12,9 @@ const DEFAULT_EMAIL = 'local@hydratemate.app';
 const DEFAULT_SETTINGS: SettingsResponse = {
   daily_goal_ml: 2000,
   reminder_intensity: 2,
+  reminder_enabled: false,
+  reminder_interval_minutes: 60,
+  quiet_hours_enabled: true,
   quiet_hours_start: '23:00',
   quiet_hours_end: '07:00'
 };
@@ -43,6 +46,7 @@ const canUseLocalStorage = (): boolean => typeof window !== 'undefined' && !!win
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 const round1 = (value: number): number => Math.round(value * 10) / 10;
 const pad2 = (value: number): string => String(value).padStart(2, '0');
+const isValidTimeString = (value: string): boolean => /^\d{2}:\d{2}$/.test(value);
 
 const generateId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -747,6 +751,9 @@ export const profileApi = {
 export interface SettingsResponse {
   daily_goal_ml: number;
   reminder_intensity: number;
+  reminder_enabled: boolean;
+  reminder_interval_minutes: number;
+  quiet_hours_enabled: boolean;
   quiet_hours_start: string;
   quiet_hours_end: string;
 }
@@ -754,6 +761,9 @@ export interface SettingsResponse {
 export interface SettingsUpdateRequest {
   daily_goal_ml?: number;
   reminder_intensity?: number;
+  reminder_enabled?: boolean;
+  reminder_interval_minutes?: number;
+  quiet_hours_enabled?: boolean;
   quiet_hours_start?: string;
   quiet_hours_end?: string;
 }
@@ -780,11 +790,43 @@ export const settingsApi = {
       state.settings.reminder_intensity = Math.round(settings.reminder_intensity);
     }
 
+    if (settings.reminder_enabled !== undefined) {
+      if (typeof settings.reminder_enabled !== 'boolean') {
+        throw new ApiError('Invalid reminder enabled flag', 400, 'invalid_reminder_enabled');
+      }
+      state.settings.reminder_enabled = settings.reminder_enabled;
+    }
+
+    if (settings.reminder_interval_minutes !== undefined) {
+      if (!Number.isFinite(settings.reminder_interval_minutes)) {
+        throw new ApiError('Invalid reminder interval', 400, 'invalid_reminder_interval');
+      }
+
+      const rounded = Math.round(settings.reminder_interval_minutes);
+      if (rounded < 15 || rounded > 720) {
+        throw new ApiError('Reminder interval out of range', 400, 'invalid_reminder_interval');
+      }
+      state.settings.reminder_interval_minutes = rounded;
+    }
+
+    if (settings.quiet_hours_enabled !== undefined) {
+      if (typeof settings.quiet_hours_enabled !== 'boolean') {
+        throw new ApiError('Invalid quiet hours enabled flag', 400, 'invalid_quiet_hours_enabled');
+      }
+      state.settings.quiet_hours_enabled = settings.quiet_hours_enabled;
+    }
+
     if (settings.quiet_hours_start !== undefined) {
+      if (!isValidTimeString(settings.quiet_hours_start)) {
+        throw new ApiError('Invalid quiet hours start', 400, 'invalid_quiet_hours_start');
+      }
       state.settings.quiet_hours_start = settings.quiet_hours_start;
     }
 
     if (settings.quiet_hours_end !== undefined) {
+      if (!isValidTimeString(settings.quiet_hours_end)) {
+        throw new ApiError('Invalid quiet hours end', 400, 'invalid_quiet_hours_end');
+      }
       state.settings.quiet_hours_end = settings.quiet_hours_end;
     }
 
