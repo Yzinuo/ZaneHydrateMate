@@ -23,7 +23,8 @@ const DEFAULT_PROFILE: ProfileData = {
   user_id: LOCAL_USER_ID,
   height_cm: 170,
   weight_kg: 60,
-  age: 25
+  age: 25,
+  activity_level: 'moderate'
 };
 
 interface LocalDbState {
@@ -232,8 +233,22 @@ const calculateStreakForDate = (targetDate: Date, totals: Map<string, number>, g
   return streak;
 };
 
-const calculateRecommendedGoal = (profile: ProfileData): number => {
-  const base = profile.weight_kg * 30;
+export const calculateRecommendedGoal = (profile: ProfileData): number => {
+  let base = profile.weight_kg * 30;
+
+  switch (profile.activity_level) {
+    case 'active':
+      base += 800;
+      break;
+    case 'moderate':
+      base += 400;
+      break;
+    case 'sedentary':
+    default:
+      // No extra addition
+      break;
+  }
+
   const ageAdjustment = profile.age >= 55 ? -200 : profile.age <= 18 ? 200 : 0;
   return clamp(Math.round(base + ageAdjustment), 1200, 4000);
 };
@@ -690,6 +705,7 @@ export interface ProfileData {
   height_cm: number;
   weight_kg: number;
   age: number;
+  activity_level?: 'sedentary' | 'moderate' | 'active';
 }
 
 export interface ProfileResponse {
@@ -702,12 +718,16 @@ export interface ProfileUpdateRequest {
   height_cm: number;
   weight_kg: number;
   age: number;
+  activity_level?: 'sedentary' | 'moderate' | 'active';
   apply_recommend: boolean;
 }
 
 export const profileApi = {
   async get(): Promise<ProfileResponse> {
     const state = await readDbState();
+    if (!state.profile.activity_level) {
+      state.profile.activity_level = 'moderate';
+    }
     return {
       profile: state.profile,
       recommended_ml: calculateRecommendedGoal(state.profile),
@@ -731,7 +751,8 @@ export const profileApi = {
       ...state.profile,
       height_cm: Math.round(profile.height_cm),
       weight_kg: round1(profile.weight_kg),
-      age: Math.round(profile.age)
+      age: Math.round(profile.age),
+      activity_level: profile.activity_level || state.profile.activity_level || 'moderate'
     };
 
     if (profile.apply_recommend) {
