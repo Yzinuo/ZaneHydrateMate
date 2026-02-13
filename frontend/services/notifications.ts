@@ -1,6 +1,7 @@
 /**
  * Local notification utilities (no websocket dependency).
  */
+import { Capacitor } from '@capacitor/core';
 
 export type ScheduleEvery = 'year' | 'month' | 'two-weeks' | 'week' | 'day' | 'hour' | 'minute' | 'second';
 
@@ -78,6 +79,25 @@ let localNotificationId = 1;
 let reminderConnected = false;
 let reminderCleanup: (() => void) | null = null;
 
+const normalizePermission = (value: string | undefined): NotificationPermissionState => {
+  if (value === 'granted' || value === 'denied' || value === 'default') {
+    return value;
+  }
+
+  if (!value) {
+    return 'default';
+  }
+
+  const normalized = value.toLowerCase();
+  if (normalized.includes('grant')) {
+    return 'granted';
+  }
+  if (normalized.includes('deny')) {
+    return 'denied';
+  }
+  return 'default';
+};
+
 async function initCapacitorNotifications(): Promise<void> {
   if (LocalNotifications) {
     return;
@@ -104,13 +124,26 @@ export async function ensureNotificationPermission(): Promise<NotificationPermis
   await initCapacitorNotifications();
 
   if (LocalNotifications) {
-    const current = await LocalNotifications.checkPermissions();
-    if (current.display === 'granted') {
+    const current = normalizePermission((await LocalNotifications.checkPermissions()).display);
+    if (current === 'granted') {
+      return 'granted';
+    }
+    if (current === 'denied') {
+      return 'denied';
+    }
+
+    const requested = normalizePermission((await LocalNotifications.requestPermissions()).display);
+    if (requested === 'granted' || requested === 'denied') {
+      return requested;
+    }
+
+    // Some OEM Android ROMs return prompt-like states even after users grant
+    // notification permission in system settings.
+    if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
       return 'granted';
     }
 
-    const requested = await LocalNotifications.requestPermissions();
-    return requested.display === 'granted' ? 'granted' : 'denied';
+    return requested;
   }
 
   if (typeof window === 'undefined' || !('Notification' in window)) {
