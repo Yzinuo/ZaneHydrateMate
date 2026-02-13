@@ -78,20 +78,20 @@ class NotificationService {
 
       const permission = getNotificationPermissionState();
       if (permission !== 'granted') {
-        const requested = await ensureNotificationPermission();
-        if (requested !== 'granted') {
-          await FlashAlarmNotify.cancelIntervalReminder();
-          return;
-        }
+        await ensureNotificationPermission();
       }
 
       const intervalMinutes = normalizeIntervalMinutes(settings.reminder_interval_minutes);
-      await FlashAlarmNotify.scheduleIntervalReminder({
-        intervalMinutes,
-        quietHoursEnabled: settings.quiet_hours_enabled,
-        quietHoursStart: settings.quiet_hours_start || '23:00',
-        quietHoursEnd: settings.quiet_hours_end || '07:00'
-      });
+      try {
+        await FlashAlarmNotify.scheduleIntervalReminder({
+          intervalMinutes,
+          quietHoursEnabled: settings.quiet_hours_enabled,
+          quietHoursStart: settings.quiet_hours_start || '23:00',
+          quietHoursEnd: settings.quiet_hours_end || '07:00'
+        });
+      } catch {
+        await FlashAlarmNotify.cancelIntervalReminder();
+      }
       return;
     }
 

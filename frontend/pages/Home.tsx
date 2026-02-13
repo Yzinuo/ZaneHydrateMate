@@ -6,10 +6,10 @@ import { COLORS, IMAGES } from '../constants';
 import { UserState } from '../types';
 
 const PLANT_STAGES = [
-  { img: '/img/1阶段.png', label: '萌芽阶段 · 种子', threshold: 0 },
-  { img: '/img/2阶段.png', label: '发芽阶段 · 新芽', threshold: 20 },
-  { img: '/img/3阶段.png', label: '生长阶段 · 幼苗', threshold: 50 },
-  { img: '/img/4阶段.png', label: '成熟阶段 · 成树', threshold: 80 },
+  { img: '/img/1阶段2.png', label: '萌芽阶段 · 种子', threshold: 0 },
+  { img: '/img/2阶段2.png', label: '发芽阶段 · 新芽', threshold: 20 },
+  { img: '/img/3阶段2.png', label: '生长阶段 · 幼苗', threshold: 50 },
+  { img: '/img/4阶段2.png', label: '成熟阶段 · 成树', threshold: 80 },
 ];
 
 interface HomeProps {

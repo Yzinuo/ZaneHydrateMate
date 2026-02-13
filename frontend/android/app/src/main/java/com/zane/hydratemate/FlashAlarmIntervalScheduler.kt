@@ -5,13 +5,17 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import java.util.Calendar
 
 object FlashAlarmIntervalScheduler {
     const val ACTION_INTERVAL_REMINDER = "com.zane.hydratemate.ACTION_INTERVAL_REMINDER"
+    const val ACTION_DEBUG_INTERVAL_REMINDER = "com.zane.hydratemate.ACTION_DEBUG_INTERVAL_REMINDER"
 
     private const val PREFS_NAME = "flash_alarm_interval_scheduler"
+    private const val DEBUG_PREFS_NAME = "flash_alarm_interval_scheduler_debug"
     private const val KEY_ENABLED = "enabled"
+    private const val KEY_DEBUG_ENABLED = "enabled"
     private const val KEY_INTERVAL_MINUTES = "interval_minutes"
     private const val KEY_QUIET_ENABLED = "quiet_hours_enabled"
     private const val KEY_QUIET_START = "quiet_hours_start"
@@ -19,6 +23,7 @@ object FlashAlarmIntervalScheduler {
     private const val DEFAULT_QUIET_START = "23:00"
     private const val DEFAULT_QUIET_END = "07:00"
     private const val REQUEST_CODE = 49051
+    private const val DEBUG_REQUEST_CODE = 49052
     private const val MAX_SKIP_ATTEMPTS = 3000
 
     fun schedule(
@@ -45,7 +50,7 @@ object FlashAlarmIntervalScheduler {
 
     fun cancel(context: Context) {
         val appContext = context.applicationContext
-        alarmManager(appContext)?.cancel(buildPendingIntent(appContext))
+        alarmManager(appContext)?.cancel(buildPendingIntent(appContext, ACTION_INTERVAL_REMINDER, REQUEST_CODE))
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_ENABLED, false)
@@ -56,15 +61,52 @@ object FlashAlarmIntervalScheduler {
         val appContext = context.applicationContext
         val config = readConfig(appContext)
         if (!config.enabled) {
+            Log.d("FlashAlarmInterval", "Skip interval reminder: scheduler disabled")
             return
         }
 
         val now = System.currentTimeMillis()
         if (!isInQuietHours(now, config)) {
             FlashAlarmEngine.triggerFlash(appContext)
+        } else {
+            Log.d("FlashAlarmInterval", "Skip interval reminder: in quiet hours")
         }
 
         scheduleNext(appContext, now)
+    }
+
+    fun scheduleDebugEveryMinute(context: Context): Long {
+        val appContext = context.applicationContext
+        appContext.getSharedPreferences(DEBUG_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_DEBUG_ENABLED, true)
+            .apply()
+
+        return scheduleNextDebug(appContext, System.currentTimeMillis())
+    }
+
+    fun cancelDebug(context: Context) {
+        val appContext = context.applicationContext
+        alarmManager(appContext)?.cancel(buildPendingIntent(appContext, ACTION_DEBUG_INTERVAL_REMINDER, DEBUG_REQUEST_CODE))
+        appContext.getSharedPreferences(DEBUG_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_DEBUG_ENABLED, false)
+            .apply()
+    }
+
+    fun onDebugAlarmReceived(context: Context) {
+        val appContext = context.applicationContext
+        val enabled = appContext
+            .getSharedPreferences(DEBUG_PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_DEBUG_ENABLED, false)
+
+        if (!enabled) {
+            Log.d("FlashAlarmInterval", "Skip debug interval reminder: scheduler disabled")
+            return
+        }
+
+        FlashAlarmEngine.triggerFlashForDebug(appContext)
+        scheduleNextDebug(appContext, System.currentTimeMillis())
     }
 
     private fun scheduleNext(context: Context, fromMs: Long): Long {
@@ -82,13 +124,26 @@ object FlashAlarmIntervalScheduler {
             attempts += 1
         }
 
-        scheduleAlarm(context, triggerAt)
+        scheduleAlarm(context, triggerAt, ACTION_INTERVAL_REMINDER, REQUEST_CODE)
         return triggerAt
     }
 
-    private fun scheduleAlarm(context: Context, triggerAt: Long) {
+    private fun scheduleNextDebug(context: Context, fromMs: Long): Long {
+        val enabled = context
+            .getSharedPreferences(DEBUG_PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_DEBUG_ENABLED, false)
+        if (!enabled) {
+            return -1L
+        }
+
+        val triggerAt = fromMs + 60_000L
+        scheduleAlarm(context, triggerAt, ACTION_DEBUG_INTERVAL_REMINDER, DEBUG_REQUEST_CODE)
+        return triggerAt
+    }
+
+    private fun scheduleAlarm(context: Context, triggerAt: Long, action: String, requestCode: Int) {
         val manager = alarmManager(context) ?: return
-        val pendingIntent = buildPendingIntent(context)
+        val pendingIntent = buildPendingIntent(context, action, requestCode)
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -153,13 +208,13 @@ object FlashAlarmIntervalScheduler {
         return hour * 60 + minute
     }
 
-    private fun buildPendingIntent(context: Context): PendingIntent {
+    private fun buildPendingIntent(context: Context, action: String, requestCode: Int): PendingIntent {
         val intent = Intent(context, FlashAlarmReminderReceiver::class.java).apply {
-            action = ACTION_INTERVAL_REMINDER
+            this.action = action
             setPackage(context.packageName)
         }
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        return PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)
+        return PendingIntent.getBroadcast(context, requestCode, intent, flags)
     }
 
     private fun alarmManager(context: Context): AlarmManager? {

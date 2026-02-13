@@ -98,6 +98,21 @@ class FlashAlarmNotifyPlugin : Plugin() {
         call.resolve()
     }
 
+    @PluginMethod
+    fun scheduleOneMinuteTestInterval(call: PluginCall) {
+        val nextTriggerAt = FlashAlarmIntervalScheduler.scheduleDebugEveryMinute(context)
+        val result = JSObject()
+        result.put("scheduled", true)
+        result.put("nextTriggerAt", nextTriggerAt)
+        call.resolve(result)
+    }
+
+    @PluginMethod
+    fun cancelOneMinuteTestInterval(call: PluginCall) {
+        FlashAlarmIntervalScheduler.cancelDebug(context)
+        call.resolve()
+    }
+
     override fun handleOnDestroy() {
         FlashAlarmEngine.clearPendingCancel()
         super.handleOnDestroy()

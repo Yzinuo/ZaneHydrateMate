@@ -23,4 +23,6 @@ export interface FlashAlarmNotifyPlugin {
   openChannelSettings(): Promise<void>;
   scheduleIntervalReminder(options: FlashAlarmIntervalOptions): Promise<FlashAlarmScheduleResult>;
   cancelIntervalReminder(): Promise<void>;
+  scheduleOneMinuteTestInterval(): Promise<FlashAlarmScheduleResult>;
+  cancelOneMinuteTestInterval(): Promise<void>;
 }

@@ -37,7 +37,7 @@
         <receiver
             android:name=".FlashAlarmReminderReceiver"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="true" />
     </application>
 
     <!-- Permissions -->

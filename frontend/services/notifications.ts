@@ -250,7 +250,7 @@ export async function showNotification(title: string, body: string, extra?: unkn
     }
   }
 
-  new Notification(title, { body, icon: '/img/1阶段.png' });
+  new Notification(title, { body, icon: '/img/1阶段2.png' });
   return true;
 }
 

@@ -15,6 +15,7 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.getcapacitor.JSObject
@@ -23,19 +24,38 @@ object FlashAlarmEngine {
     const val CHANNEL_ID = "flash_alarm_channel"
     private const val CHANNEL_NAME = "Flash Alarm Notify"
     private const val NOTIFICATION_ID = 90501
-    private const val FLASH_DURATION_MS = 1000L
-    private val VIBRATION_PATTERN = longArrayOf(0, 1000)
+    private const val FLASH_DURATION_MS = 1500L
+    private val VIBRATION_PATTERN = longArrayOf(0, 1500)
     private val mainHandler = Handler(Looper.getMainLooper())
     private var cancelRunnable: Runnable? = null
 
     fun triggerFlash(context: Context) {
         val appContext = context.applicationContext
         if (!hasPostNotificationPermission(appContext)) {
+            Log.w("FlashAlarmEngine", "Skip flash trigger: POST_NOTIFICATIONS not granted")
             return
         }
 
         createOrUpdateChannel(appContext)
         triggerPhoneVibrationFallback(appContext)
+
+        val manager = notificationManager(appContext)
+        clearPendingCancel()
+        manager.notify(NOTIFICATION_ID, buildNotification(appContext))
+        val runnable = Runnable { manager.cancel(NOTIFICATION_ID) }
+        cancelRunnable = runnable
+        mainHandler.postDelayed(runnable, FLASH_DURATION_MS)
+    }
+
+    fun triggerFlashForDebug(context: Context) {
+        val appContext = context.applicationContext
+        createOrUpdateChannel(appContext)
+        triggerPhoneVibrationFallback(appContext)
+
+        if (!hasPostNotificationPermission(appContext)) {
+            Log.w("FlashAlarmEngine", "Debug trigger: no POST_NOTIFICATIONS, vibration fallback only")
+            return
+        }
 
         val manager = notificationManager(appContext)
         clearPendingCancel()
