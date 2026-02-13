@@ -17,7 +17,7 @@ const DRINK_OPTIONS: DrinkOption[] = [
   { id: 'small', label: '小杯水', amount: 50, category: 'water', icon: <Droplet className="w-5 h-5" />, color: 'bg-blue-500/20 text-blue-400' },
     { id: 'cup', label: '一杯水', amount: 250, category: 'water', icon: <Droplet className="w-5 h-5" />, color: 'bg-blue-500/20 text-blue-400' },
     { id: 'bottle', label: '一瓶水', amount: 500, category: 'water', icon: <Droplet className="w-5 h-5" />, color: 'bg-blue-500/20 text-blue-400' },
-    { id: 'tea', label: '茶/咖啡', amount: 150, category: 'tea', icon: <Coffee className="w-5 h-5" />, color: 'bg-amber-500/20 text-amber-400' },
+    { id: 'tea', label: '咖啡', amount: 150, category: 'tea', icon: <Coffee className="w-5 h-5" />, color: 'bg-amber-500/20 text-amber-400' },
     { id: 'juice', label: '果汁饮料', amount: 300, category: 'juice', icon: <Wine className="w-5 h-5" />, color: 'bg-orange-500/20 text-orange-400' },
     { id: 'milk', label: '牛奶豆浆', amount: 200, category: 'milk', icon: <Milk className="w-5 h-5" />, color: 'bg-white/20 text-white' },
 ];

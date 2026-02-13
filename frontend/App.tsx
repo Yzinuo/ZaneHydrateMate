@@ -62,7 +62,7 @@ const toUserProfile = (profile: ProfileResponse | null): UserProfile | undefined
     age: profile.profile.age,
     weightKg: profile.profile.weight_kg,
     heightCm: profile.profile.height_cm,
-    activityLevel: 'moderate'
+    activityLevel: profile.profile.activity_level || 'moderate'
   };
 };
 
@@ -331,6 +331,7 @@ const App: React.FC = () => {
         height_cm: profile.heightCm,
         weight_kg: profile.weightKg,
         age: profile.age,
+        activity_level: profile.activityLevel,
         apply_recommend: applyRecommend
       });
 

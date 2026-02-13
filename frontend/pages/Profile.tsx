@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, Save, User, Activity, Ruler, Scale } from 'lucide-react';
 import { UserProfile } from '../types';
+import { calculateRecommendedGoal } from '../api';
 
 interface ProfileProps {
   initial?: UserProfile;
@@ -32,6 +33,16 @@ export const Profile: React.FC<ProfileProps> = ({
 }) => {
   const [profile, setProfile] = useState<UserProfile>(() => getSafeProfile(initial));
   const [applyRecommend, setApplyRecommend] = useState(true);
+
+  const calculatedRecommend = useMemo(() => {
+    return calculateRecommendedGoal({
+      user_id: 'preview',
+      age: profile.age,
+      weight_kg: profile.weightKg,
+      height_cm: profile.heightCm,
+      activity_level: profile.activityLevel
+    });
+  }, [profile]);
 
   useEffect(() => {
     setProfile(getSafeProfile(initial));
@@ -146,7 +157,7 @@ export const Profile: React.FC<ProfileProps> = ({
       <div className="bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100 text-center">
         <p className="text-xs text-gray-400 mb-2">推荐饮水量</p>
         <div className="flex items-baseline justify-center gap-2">
-          <span className="text-4xl font-black text-[#0dc792]">{recommendedMl.toLocaleString()}</span>
+          <span className="text-4xl font-black text-[#0dc792]">{calculatedRecommend.toLocaleString()}</span>
           <span className="text-lg text-gray-400">ml</span>
         </div>
         <p className="text-[10px] text-gray-300 mt-3">当前目标：{currentGoalMl.toLocaleString()} ml</p>
