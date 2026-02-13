@@ -123,7 +123,7 @@ export const HomeModern: React.FC<HomeProps> = ({
     <div className="flex flex-col min-h-full bg-[#fbffff] text-gray-800">
       <div className="px-6 pt-4 pb-12 flex items-center justify-between z-10">
         <div className="flex flex-col">
-          <h1 className="text-xl font-bold text-gray-800">HydrateMate by Zane</h1>
+          <h1 className="text-xl font-bold text-gray-800">喝了么 by Zane</h1>
           <p className="text-xs text-gray-400">坚持喝水，见证成长</p>
         </div>
         <div className="flex items-center gap-3">
