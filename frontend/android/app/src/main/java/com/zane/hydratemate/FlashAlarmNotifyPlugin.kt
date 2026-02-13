@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Intent
+import android.provider.Settings
 import android.content.ContentResolver
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
@@ -11,8 +13,12 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
@@ -38,10 +44,41 @@ class FlashAlarmNotifyPlugin : Plugin() {
         }
 
         createOrUpdateChannel()
+        triggerPhoneVibrationFallback()
         mainHandler.removeCallbacks(cancelRunnable)
         notificationManager().notify(NOTIFICATION_ID, buildNotification())
         mainHandler.postDelayed(cancelRunnable, FLASH_DURATION_MS)
-        call.resolve()
+        call.resolve(buildDebugResult())
+    }
+
+    @PluginMethod
+    fun openChannelSettings(call: PluginCall) {
+        try {
+            val intent = Intent().apply {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                } else {
+                    action = "android.settings.APP_NOTIFICATION_SETTINGS"
+                    putExtra("app_package", context.packageName)
+                    putExtra("app_uid", context.applicationInfo.uid)
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            call.resolve()
+        } catch (error: Throwable) {
+            try {
+                val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(fallbackIntent)
+                call.resolve()
+            } catch (fallbackError: Throwable) {
+                call.reject(fallbackError.message ?: "failed to open notification settings")
+            }
+        }
     }
 
     override fun handleOnDestroy() {
@@ -59,16 +96,18 @@ class FlashAlarmNotifyPlugin : Plugin() {
             .setContentText("Flash alarm")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(Notification.CATEGORY_ALARM)
-            .setOngoing(true)
+            // Wear OS bridging docs indicate ongoing notifications may not be bridged.
+            // Keep this non-ongoing so paired watches can mirror the alert.
+            .setOngoing(false)
             .setAutoCancel(false)
-            .setOnlyAlertOnce(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setVibrate(VIBRATION_PATTERN)
             .apply {
                 if (silentUri != null) {
                     setSound(silentUri)
                 } else {
-                    setSilent(true)
+                    // Avoid setSilent(true): it suppresses vibration on this notification.
+                    setSound(null)
                 }
             }
             .build()
@@ -99,6 +138,46 @@ class FlashAlarmNotifyPlugin : Plugin() {
         notificationManager().createNotificationChannel(channel)
     }
 
+    private fun triggerPhoneVibrationFallback() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = context.getSystemService(VibratorManager::class.java)
+                val vibrator = vibratorManager?.defaultVibrator
+                if (vibrator?.hasVibrator() == true) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(FLASH_DURATION_MS, VibrationEffect.DEFAULT_AMPLITUDE))
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = context.getSystemService(Vibrator::class.java)
+                if (vibrator?.hasVibrator() == true) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator.vibrate(VibrationEffect.createOneShot(FLASH_DURATION_MS, VibrationEffect.DEFAULT_AMPLITUDE))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        vibrator.vibrate(FLASH_DURATION_MS)
+                    }
+                }
+            }
+        } catch (_: Throwable) {
+            // Keep notification flow alive even if device vibration fallback fails.
+        }
+    }
+
+    private fun buildDebugResult(): JSObject {
+        val result = JSObject()
+        result.put("channelId", CHANNEL_ID)
+        result.put("silentSoundFound", silentSoundUri() != null)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = notificationManager().getNotificationChannel(CHANNEL_ID)
+            result.put("channelExists", channel != null)
+            result.put("channelImportance", channel?.importance ?: -1)
+            result.put("channelShouldVibrate", channel?.shouldVibrate() ?: false)
+        }
+
+        return result
+    }
+
     private fun notificationManager(): NotificationManager {
         return context.getSystemService(NotificationManager::class.java)
     }
@@ -115,7 +194,7 @@ class FlashAlarmNotifyPlugin : Plugin() {
         private const val CHANNEL_ID = "flash_alarm_channel"
         private const val CHANNEL_NAME = "Flash Alarm Notify"
         private const val NOTIFICATION_ID = 90501
-        private const val FLASH_DURATION_MS = 500L
+        private const val FLASH_DURATION_MS = 1000L
         private val VIBRATION_PATTERN = longArrayOf(0, 1000)
     }
 }

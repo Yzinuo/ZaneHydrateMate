@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, Bell, Clock, Zap, Moon, Sun, Dumbbell, Calendar, Trash2 } from 'lucide-react';
+import { ChevronLeft, Bell, Zap, Moon, Sun, Dumbbell, Calendar, Trash2 } from 'lucide-react';
 import type { SettingsResponse, SettingsUpdateRequest } from '../api';
 import { ReminderConfig, DoNotDisturbConfig } from '../types';
 import type { NotificationPermissionState } from '../services/notifications';
@@ -25,23 +25,24 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
   settings,
   onRequestNotificationPermission,
   onSaveSettings,
-  onBack
+  onBack,
 }) => {
   const [reminders, setReminders] = useState<ReminderConfig[]>([
     { id: '1', type: 'scene', label: '晨间饮水', time: '07:30', enabled: true },
-    { id: '2', type: 'scene', label: '睡前补水', time: '22:00', enabled: false }
+    { id: '2', type: 'scene', label: '睡前补水', time: '22:00', enabled: false },
   ]);
 
   const [dndConfig, setDndConfig] = useState<DoNotDisturbConfig>({
     enabled: true,
     start: DEFAULT_DND_START,
-    end: DEFAULT_DND_END
+    end: DEFAULT_DND_END,
   });
 
   const [intervalConfig, setIntervalConfig] = useState({
     enabled: false,
-    minutes: DEFAULT_INTERVAL_MINUTES
+    minutes: DEFAULT_INTERVAL_MINUTES,
   });
+
   const [flashTestRunning, setFlashTestRunning] = useState(false);
   const [flashTestMessage, setFlashTestMessage] = useState<string | null>(null);
 
@@ -52,12 +53,13 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
 
     setIntervalConfig({
       enabled: settings.reminder_enabled,
-      minutes: settings.reminder_interval_minutes
+      minutes: settings.reminder_interval_minutes,
     });
+
     setDndConfig({
       enabled: settings.quiet_hours_enabled,
       start: settings.quiet_hours_start || DEFAULT_DND_START,
-      end: settings.quiet_hours_end || DEFAULT_DND_END
+      end: settings.quiet_hours_end || DEFAULT_DND_END,
     });
   }, [settings]);
 
@@ -94,9 +96,10 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
       type: 'scene',
       label,
       time,
-      enabled: true
+      enabled: true,
     };
-    setReminders([...reminders, newReminder]);
+
+    setReminders((prev) => [...prev, newReminder]);
   };
 
   const updateDnd = async (key: keyof DoNotDisturbConfig, value: string | boolean) => {
@@ -118,15 +121,21 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
   const triggerFlashAlarmTest = async () => {
     setFlashTestRunning(true);
     setFlashTestMessage(null);
+
     try {
       const permission = await onRequestNotificationPermission();
       if (permission !== 'granted') {
-        setFlashTestMessage('请先授予通知权限，再测试震动。');
-        return;
+        // 部分厂商 ROM 会返回非 granted 状态，但系统设置里实际已授权。
+        // 继续调用原生插件，由原生层做最终权限判断。
+        setFlashTestMessage('通知权限状态异常，继续尝试触发原生震动...');
       }
 
-      await FlashAlarmNotify.trigger();
-      setFlashTestMessage('已触发 500ms 测试震动，请观察手机和手表。');
+      const result = await FlashAlarmNotify.trigger();
+      if (result.channelShouldVibrate === false) {
+        setFlashTestMessage('已触发通知，但系统显示“震动关闭”。请点下方按钮进入应用通知管理页开启震动。');
+      } else {
+        setFlashTestMessage('已触发 1s 测试震动，请观察手机和手表。');
+      }
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : 'unknown error';
       setFlashTestMessage(`触发失败: ${message}`);
@@ -179,7 +188,7 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
               { min: 90, label: '1.5小时' },
               { min: 120, label: '2小时' },
               { min: 180, label: '3小时' },
-              { min: 240, label: '4小时' }
+              { min: 240, label: '4小时' },
             ].map((opt) => (
               <button
                 key={opt.min}
@@ -215,19 +224,27 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
             .map((r, index) => (
               <div key={r.id} className={`p-4 flex items-center justify-between ${index !== 0 ? 'border-t border-gray-50' : ''}`}>
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${r.enabled ? 'bg-blue-50 text-blue-500' : 'bg-gray-50 text-gray-400'}`}>
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      r.enabled ? 'bg-blue-50 text-blue-500' : 'bg-gray-50 text-gray-400'
+                    }`}
+                  >
                     {r.label.includes('晨') ? <Sun size={18} /> : r.label.includes('睡') ? <Moon size={18} /> : <Bell size={18} />}
                   </div>
                   <div>
                     <input
                       value={r.label}
-                      onChange={(e) => setReminders((prev) => prev.map((item) => (item.id === r.id ? { ...item, label: e.target.value } : item)))}
+                      onChange={(e) =>
+                        setReminders((prev) => prev.map((item) => (item.id === r.id ? { ...item, label: e.target.value } : item)))
+                      }
                       className="font-bold text-gray-800 bg-transparent outline-none w-24"
                     />
                     <div className="text-xs text-gray-400 mt-1">
                       <TimePicker
-                        value={r.time}
-                        onChange={(val) => setReminders((prev) => prev.map((item) => (item.id === r.id ? { ...item, time: val } : item)))}
+                        value={r.time || '09:00'}
+                        onChange={(val) =>
+                          setReminders((prev) => prev.map((item) => (item.id === r.id ? { ...item, time: val } : item)))
+                        }
                         className="h-8 border-none p-0 text-xs text-gray-400 font-normal w-auto shadow-none"
                       />
                     </div>
@@ -241,7 +258,11 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
                     onClick={() => toggleReminder(r.id)}
                     className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${r.enabled ? 'bg-[#0dc792]' : 'bg-gray-200'}`}
                   >
-                    <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${r.enabled ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                    <div
+                      className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+                        r.enabled ? 'translate-x-6' : 'translate-x-0'
+                      }`}
+                    ></div>
                   </div>
                 </div>
               </div>
@@ -262,7 +283,11 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
               }}
               className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${dndConfig.enabled ? 'bg-[#0dc792]' : 'bg-gray-200'}`}
             >
-              <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${dndConfig.enabled ? 'translate-x-6' : 'translate-x-0'}`}></div>
+              <div
+                className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+                  dndConfig.enabled ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              ></div>
             </div>
           </div>
 
@@ -309,7 +334,15 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
               flashTestRunning ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-[#0dc792] text-white hover:bg-[#0bb682]'
             }`}
           >
-            {flashTestRunning ? '触发中...' : '测试手表联动震动（500ms）'}
+            {flashTestRunning ? '触发中...' : '测试手表联动震动（1s）'}
+          </button>
+          <button
+            onClick={() => {
+              void FlashAlarmNotify.openChannelSettings();
+            }}
+            className="w-full rounded-xl px-4 py-3 text-sm font-bold transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200"
+          >
+            打开应用通知管理
           </button>
           {flashTestMessage && <p className="text-xs text-gray-500">{flashTestMessage}</p>}
         </div>
