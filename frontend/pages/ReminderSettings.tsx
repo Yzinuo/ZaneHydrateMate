@@ -4,6 +4,7 @@ import type { SettingsResponse, SettingsUpdateRequest } from '../api';
 import { ReminderConfig, DoNotDisturbConfig } from '../types';
 import type { NotificationPermissionState } from '../services/notifications';
 import { TimePicker } from '../components/ui/time-picker';
+import { FlashAlarmNotify } from '../src';
 
 interface ReminderSettingsProps {
   settings: SettingsResponse | null;
@@ -41,6 +42,8 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
     enabled: false,
     minutes: DEFAULT_INTERVAL_MINUTES
   });
+  const [flashTestRunning, setFlashTestRunning] = useState(false);
+  const [flashTestMessage, setFlashTestMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!settings) {
@@ -110,6 +113,26 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
     }
 
     await onSaveSettings(patch);
+  };
+
+  const triggerFlashAlarmTest = async () => {
+    setFlashTestRunning(true);
+    setFlashTestMessage(null);
+    try {
+      const permission = await onRequestNotificationPermission();
+      if (permission !== 'granted') {
+        setFlashTestMessage('请先授予通知权限，再测试震动。');
+        return;
+      }
+
+      await FlashAlarmNotify.trigger();
+      setFlashTestMessage('已触发 500ms 测试震动，请观察手机和手表。');
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : 'unknown error';
+      setFlashTestMessage(`触发失败: ${message}`);
+    } finally {
+      setFlashTestRunning(false);
+    }
   };
 
   return (
@@ -269,6 +292,26 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
             </div>
           )}
           <p className="text-[10px] text-gray-400 mt-3 text-center">在此时间段内，将不会收到饮水提醒通知</p>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+          <Dumbbell size={14} /> 临时测试
+        </h2>
+        <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100 p-5 space-y-3">
+          <button
+            onClick={() => {
+              void triggerFlashAlarmTest();
+            }}
+            disabled={flashTestRunning}
+            className={`w-full rounded-xl px-4 py-3 text-sm font-bold transition-colors ${
+              flashTestRunning ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-[#0dc792] text-white hover:bg-[#0bb682]'
+            }`}
+          >
+            {flashTestRunning ? '触发中...' : '测试手表联动震动（500ms）'}
+          </button>
+          {flashTestMessage && <p className="text-xs text-gray-500">{flashTestMessage}</p>}
         </div>
       </section>
 
