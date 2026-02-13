@@ -33,6 +33,11 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <receiver
+            android:name=".FlashAlarmReminderReceiver"
+            android:enabled="true"
+            android:exported="false" />
     </application>
 
     <!-- Permissions -->

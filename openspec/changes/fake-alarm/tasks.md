@@ -23,3 +23,7 @@
 
 - [x] 5.1 Validate rapid repeated trigger calls do not overlap stale delayed-cancel handlers.
 - [ ] 5.2 Validate end-to-end behavior on Android phone plus connected smartwatch: strong vibration starts promptly and stops after about 500ms.
+- [x] 5.3 Route Android interval reminder scheduling through `FlashAlarmNotify` native scheduling API (`scheduleIntervalReminder` / `cancelIntervalReminder`) instead of generic local notification channel.
+- [x] 5.4 Route Android in-app immediate notification trigger path to `FlashAlarmNotify.trigger()` so reminder alerts use the same flash alarm logic.
+- [x] 5.5 Add native Android alarm receiver wiring for interval reminders (`FlashAlarmReminderReceiver` + manifest registration) to keep reminders firing when the app is backgrounded.
+- [ ] 5.6 Validate interval reminder end-to-end on physical phone + connected smartwatch (including quiet-hours skip behavior and repeated interval cadence).
