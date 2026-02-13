@@ -3,6 +3,7 @@ import { ChevronLeft, Bell, Clock, Zap, Moon, Sun, Dumbbell, Calendar, Trash2 } 
 import type { SettingsResponse, SettingsUpdateRequest } from '../api';
 import { ReminderConfig, DoNotDisturbConfig } from '../types';
 import type { NotificationPermissionState } from '../services/notifications';
+import { TimePicker } from '../components/ui/time-picker';
 
 interface ReminderSettingsProps {
   settings: SettingsResponse | null;
@@ -200,12 +201,11 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
                       onChange={(e) => setReminders((prev) => prev.map((item) => (item.id === r.id ? { ...item, label: e.target.value } : item)))}
                       className="font-bold text-gray-800 bg-transparent outline-none w-24"
                     />
-                    <div className="text-xs text-gray-400">
-                      <input
-                        type="time"
+                    <div className="text-xs text-gray-400 mt-1">
+                      <TimePicker
                         value={r.time}
-                        onChange={(e) => setReminders((prev) => prev.map((item) => (item.id === r.id ? { ...item, time: e.target.value } : item)))}
-                        className="bg-transparent outline-none"
+                        onChange={(val) => setReminders((prev) => prev.map((item) => (item.id === r.id ? { ...item, time: val } : item)))}
+                        className="h-8 border-none p-0 text-xs text-gray-400 font-normal w-auto shadow-none"
                       />
                     </div>
                   </div>
@@ -247,25 +247,23 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
             <div className="flex items-center gap-4 text-sm">
               <div className="flex-1 bg-gray-50 rounded-xl p-2 flex flex-col items-center">
                 <span className="text-xs text-gray-400 mb-1">开始</span>
-                <input
-                  type="time"
+                <TimePicker
                   value={dndConfig.start}
-                  onChange={(e) => {
-                    void updateDnd('start', e.target.value);
+                  onChange={(val) => {
+                    void updateDnd('start', val);
                   }}
-                  className="bg-transparent font-bold text-gray-800 outline-none text-center w-full"
+                  className="font-bold text-gray-800 border-none p-0 h-auto w-full shadow-none justify-center"
                 />
               </div>
               <span className="text-gray-300">-</span>
               <div className="flex-1 bg-gray-50 rounded-xl p-2 flex flex-col items-center">
                 <span className="text-xs text-gray-400 mb-1">结束</span>
-                <input
-                  type="time"
+                <TimePicker
                   value={dndConfig.end}
-                  onChange={(e) => {
-                    void updateDnd('end', e.target.value);
+                  onChange={(val) => {
+                    void updateDnd('end', val);
                   }}
-                  className="bg-transparent font-bold text-gray-800 outline-none text-center w-full"
+                  className="font-bold text-gray-800 border-none p-0 h-auto w-full shadow-none justify-center"
                 />
               </div>
             </div>
