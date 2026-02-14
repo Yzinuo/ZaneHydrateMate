@@ -1,4 +1,4 @@
-import type { SettingsResponse } from '../api';
+import type { SceneReminderSetting, SettingsResponse } from '../api';
 import { Capacitor } from '@capacitor/core';
 import { FlashAlarmNotify } from '../src';
 import {
@@ -13,6 +13,7 @@ const REMINDER_TITLE = '定时饮水提醒';
 const REMINDER_BODY = '该喝水啦，记得补充一点水分。';
 const MINUTES_PER_DAY = 24 * 60;
 const REMINDER_ID_BASE = 600000;
+const DEFAULT_SCENE_NOTIFICATION_LABEL = 'Scene Reminder';
 
 const toMinutesOfDay = (value: string): number => {
   const [hourText, minuteText] = value.split(':');
@@ -48,6 +49,31 @@ const normalizeIntervalMinutes = (value: number): number => {
   return rounded;
 };
 
+const normalizeSceneReminders = (value: SceneReminderSetting[] | undefined): SceneReminderSetting[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is SceneReminderSetting => {
+      return (
+        !!item &&
+        typeof item.id === 'string' &&
+        item.id.trim().length > 0 &&
+        typeof item.label === 'string' &&
+        typeof item.time === 'string' &&
+        /^\d{2}:\d{2}$/.test(item.time) &&
+        typeof item.enabled === 'boolean'
+      );
+    })
+    .map((item) => ({
+      id: item.id.trim(),
+      label: item.label.trim() || DEFAULT_SCENE_NOTIFICATION_LABEL,
+      time: item.time,
+      enabled: item.enabled
+    }));
+};
+
 const gcd = (a: number, b: number): number => {
   let x = Math.abs(a);
   let y = Math.abs(b);
@@ -71,26 +97,36 @@ class NotificationService {
     const isNativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 
     if (isNativeAndroid) {
-      if (!settings.reminder_enabled) {
-        await FlashAlarmNotify.cancelIntervalReminder();
-        return;
-      }
-
       const permission = getNotificationPermissionState();
       if (permission !== 'granted') {
         await ensureNotificationPermission();
       }
 
-      const intervalMinutes = normalizeIntervalMinutes(settings.reminder_interval_minutes);
-      try {
-        await FlashAlarmNotify.scheduleIntervalReminder({
-          intervalMinutes,
-          quietHoursEnabled: settings.quiet_hours_enabled,
-          quietHoursStart: settings.quiet_hours_start || '23:00',
-          quietHoursEnd: settings.quiet_hours_end || '07:00'
-        });
-      } catch {
+      if (!settings.reminder_enabled) {
         await FlashAlarmNotify.cancelIntervalReminder();
+      } else {
+        const intervalMinutes = normalizeIntervalMinutes(settings.reminder_interval_minutes);
+        try {
+          await FlashAlarmNotify.scheduleIntervalReminder({
+            intervalMinutes,
+            quietHoursEnabled: settings.quiet_hours_enabled,
+            quietHoursStart: settings.quiet_hours_start || '23:00',
+            quietHoursEnd: settings.quiet_hours_end || '07:00'
+          });
+        } catch {
+          await FlashAlarmNotify.cancelIntervalReminder();
+        }
+      }
+
+      const sceneReminders = normalizeSceneReminders(settings.scene_reminders);
+      try {
+        if (sceneReminders.length === 0) {
+          await FlashAlarmNotify.cancelSceneReminders();
+        } else {
+          await FlashAlarmNotify.scheduleSceneReminders({ reminders: sceneReminders });
+        }
+      } catch {
+        await FlashAlarmNotify.cancelSceneReminders();
       }
       return;
     }

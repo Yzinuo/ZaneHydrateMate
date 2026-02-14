@@ -9,6 +9,18 @@ const LOCAL_SESSION_KEY = 'hydratemate_local_session_v1';
 const LOCAL_USER_ID = 'local-user';
 const DEFAULT_EMAIL = 'local@hydratemate.app';
 
+export interface SceneReminderSetting {
+  id: string;
+  label: string;
+  time: string;
+  enabled: boolean;
+}
+
+const DEFAULT_SCENE_REMINDERS: SceneReminderSetting[] = [
+  { id: '1', label: '晨间喝水', time: '07:30', enabled: true },
+  { id: '2', label: '睡前补水', time: '22:00', enabled: false }
+];
+
 const DEFAULT_SETTINGS: SettingsResponse = {
   daily_goal_ml: 2000,
   reminder_intensity: 2,
@@ -16,7 +28,8 @@ const DEFAULT_SETTINGS: SettingsResponse = {
   reminder_interval_minutes: 60,
   quiet_hours_enabled: true,
   quiet_hours_start: '23:00',
-  quiet_hours_end: '07:00'
+  quiet_hours_end: '07:00',
+  scene_reminders: DEFAULT_SCENE_REMINDERS
 };
 
 const DEFAULT_PROFILE: ProfileData = {
@@ -48,6 +61,28 @@ const clamp = (value: number, min: number, max: number): number => Math.max(min,
 const round1 = (value: number): number => Math.round(value * 10) / 10;
 const pad2 = (value: number): string => String(value).padStart(2, '0');
 const isValidTimeString = (value: string): boolean => /^\d{2}:\d{2}$/.test(value);
+
+const normalizeSceneReminders = (input: unknown): SceneReminderSetting[] => {
+  if (!Array.isArray(input)) {
+    return DEFAULT_SCENE_REMINDERS.map((item) => ({ ...item }));
+  }
+
+  const normalized: SceneReminderSetting[] = [];
+  input.forEach((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+
+    const raw = entry as Partial<SceneReminderSetting>;
+    const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : `scene-${index + 1}`;
+    const label = typeof raw.label === 'string' ? raw.label.trim() : '';
+    const time = typeof raw.time === 'string' && isValidTimeString(raw.time) ? raw.time : '09:00';
+    const enabled = typeof raw.enabled === 'boolean' ? raw.enabled : true;
+    normalized.push({ id, label, time, enabled });
+  });
+
+  return normalized;
+};
 
 const generateId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -114,7 +149,10 @@ const writeJson = (key: string, value: unknown): void => {
 
 const getDefaultDbState = (): LocalDbState => ({
   profile: { ...DEFAULT_PROFILE },
-  settings: { ...DEFAULT_SETTINGS },
+  settings: {
+    ...DEFAULT_SETTINGS,
+    scene_reminders: DEFAULT_SCENE_REMINDERS.map((item) => ({ ...item }))
+  },
   intakes: []
 });
 
@@ -777,6 +815,7 @@ export interface SettingsResponse {
   quiet_hours_enabled: boolean;
   quiet_hours_start: string;
   quiet_hours_end: string;
+  scene_reminders: SceneReminderSetting[];
 }
 
 export interface SettingsUpdateRequest {
@@ -787,6 +826,7 @@ export interface SettingsUpdateRequest {
   quiet_hours_enabled?: boolean;
   quiet_hours_start?: string;
   quiet_hours_end?: string;
+  scene_reminders?: SceneReminderSetting[];
 }
 
 export const settingsApi = {
@@ -849,6 +889,10 @@ export const settingsApi = {
         throw new ApiError('Invalid quiet hours end', 400, 'invalid_quiet_hours_end');
       }
       state.settings.quiet_hours_end = settings.quiet_hours_end;
+    }
+
+    if (settings.scene_reminders !== undefined) {
+      state.settings.scene_reminders = normalizeSceneReminders(settings.scene_reminders);
     }
 
     await writeDbState(state);

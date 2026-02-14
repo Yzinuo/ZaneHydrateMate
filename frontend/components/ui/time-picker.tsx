@@ -88,12 +88,15 @@ export function TimePicker({ value, onChange, className }: TimePickerProps) {
             <SelectTrigger className="w-[70px]">
               <SelectValue placeholder="Minute" />
             </SelectTrigger>
-            <SelectContent>
-              {["00", "15", "30", "45"].map((m) => (
-                <SelectItem key={m} value={m}>
-                  {m}
-                </SelectItem>
-              ))}
+            <SelectContent className="max-h-40">
+              {Array.from({ length: 60 }, (_, i) => {
+                const m = i.toString().padStart(2, "0");
+                return (
+                  <SelectItem key={m} value={m}>
+                    {m}
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
 
