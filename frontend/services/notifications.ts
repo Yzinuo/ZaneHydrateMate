@@ -2,6 +2,7 @@
  * Local notification utilities (no websocket dependency).
  */
 import { Capacitor } from '@capacitor/core';
+import { FlashAlarmNotify } from '../src';
 
 export type ScheduleEvery = 'year' | 'month' | 'two-weeks' | 'week' | 'day' | 'hour' | 'minute' | 'second';
 
@@ -200,6 +201,24 @@ export async function cancelNotifications(ids: number[]): Promise<boolean> {
 }
 
 export async function showNotification(title: string, body: string, extra?: unknown): Promise<boolean> {
+  const isNativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+  if (isNativeAndroid) {
+    const permission = getNotificationPermissionState();
+    if (permission !== 'granted') {
+      const requested = await ensureNotificationPermission();
+      if (requested !== 'granted') {
+        return false;
+      }
+    }
+
+    try {
+      await FlashAlarmNotify.trigger();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   await initCapacitorNotifications();
 
   if (LocalNotifications) {
@@ -231,7 +250,7 @@ export async function showNotification(title: string, body: string, extra?: unkn
     }
   }
 
-  new Notification(title, { body, icon: '/img/1阶段.png' });
+  new Notification(title, { body, icon: '/img/1阶段2.png' });
   return true;
 }
 

@@ -62,6 +62,15 @@ const getLocalISODate = (date: Date): string => {
   return new Date(date.getTime() - offset).toISOString().slice(0, 10);
 };
 
+const formatHourTick = (value: string): string => {
+  const hour = Number(value.split(':')[0]);
+  if (!Number.isFinite(hour)) {
+    return value;
+  }
+  // Keep full 2-hour data points, only show a label every 4 hours.
+  return hour % 4 === 0 ? value : '';
+};
+
 const EmptyBlock: React.FC<{ text: string }> = ({ text }) => (
   <div className="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">{text}</div>
 );
@@ -121,6 +130,12 @@ export const Stats: React.FC<StatsProps> = ({
     fetchData();
   }, [selectedDate, todayIntakes]); // dependency on todayIntakes included to ensure stability but logic guards it
 
+  const isTodaySelected = selectedDate === getLocalISODate(new Date());
+  const visibleIntakes = useMemo(
+    () => (isTodaySelected ? todayIntakes : dailyIntakes),
+    [isTodaySelected, todayIntakes, dailyIntakes]
+  );
+
   const weeklyData = useMemo(() => {
     if (!weekly) {
       return [] as Array<{ name: string; value: number; fullDate: string }>;
@@ -153,25 +168,28 @@ export const Stats: React.FC<StatsProps> = ({
 
   const hourlyData = useMemo(() => {
     const hourlyMap = new Map<number, number>();
-    dailyIntakes.forEach((intake) => {
+    visibleIntakes.forEach((intake) => {
       const hour = new Date(intake.intake_time).getHours();
       hourlyMap.set(hour, (hourlyMap.get(hour) || 0) + intake.amount_ml);
     });
 
     const points: Array<{ hour: string; value: number }> = [];
-    for (let hour = 6; hour <= 22; hour += 2) {
+    // Display every 2 hours but aggregate all data
+    for (let hour = 0; hour < 24; hour += 2) {
+      // Combine this hour and the next hour for a smoother 2-hour block display
+      const combinedValue = (hourlyMap.get(hour) || 0) + (hourlyMap.get(hour + 1) || 0);
       points.push({
-        hour: String(hour),
-        value: hourlyMap.get(hour) || 0
+        hour: `${hour}:00`,
+        value: combinedValue
       });
     }
 
     return points;
-  }, [dailyIntakes]);
+  }, [visibleIntakes]);
 
   const pieData = useMemo(() => {
     const categoryMap = new Map<string, number>();
-    dailyIntakes.forEach((intake) => {
+    visibleIntakes.forEach((intake) => {
       categoryMap.set(intake.category, (categoryMap.get(intake.category) || 0) + intake.amount_ml);
     });
 
@@ -186,7 +204,7 @@ export const Stats: React.FC<StatsProps> = ({
       value: Math.round((value / total) * 100),
       color: colors[index % colors.length]
     }));
-  }, [dailyIntakes]);
+  }, [visibleIntakes]);
 
   const weeklyLiters = ((weekly?.total_ml || 0) / 1000).toFixed(1);
   const avgLiters = ((weekly?.avg_daily || 0) / 1000).toFixed(1);
@@ -309,6 +327,9 @@ export const Stats: React.FC<StatsProps> = ({
                     tickLine={false}
                     tick={{ fill: '#9ca3af', fontSize: 10 }}
                     interval={0}
+                    tickFormatter={formatHourTick}
+                    tickMargin={8}
+                    minTickGap={16}
                   />
                   <Tooltip
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}

@@ -441,11 +441,12 @@ class LocalDbStore {
     const db = this.getDb();
     const nowIso = new Date().toISOString();
 
-    await db.execute('BEGIN TRANSACTION;');
+    await db.beginTransaction();
     try {
       await db.run(
         'INSERT OR REPLACE INTO profile (user_id, height_cm, weight_kg, age, updated_at) VALUES (?, ?, ?, ?, ?);',
-        [nextState.profile.user_id, nextState.profile.height_cm, nextState.profile.weight_kg, nextState.profile.age, nowIso]
+        [nextState.profile.user_id, nextState.profile.height_cm, nextState.profile.weight_kg, nextState.profile.age, nowIso],
+        false
       );
 
       await db.run(
@@ -459,21 +460,30 @@ class LocalDbStore {
           nextState.settings.quiet_hours_start,
           nextState.settings.quiet_hours_end,
           nowIso
-        ]
+        ],
+        false
       );
 
-      await db.run('DELETE FROM intakes;');
+      await db.run('DELETE FROM intakes;', [], false);
 
       for (const intake of nextState.intakes) {
         await db.run(
           'INSERT OR REPLACE INTO intakes (id, amount_ml, category, intake_time, created_at) VALUES (?, ?, ?, ?, ?);',
-          [intake.id, intake.amount_ml, intake.category, intake.intake_time, nowIso]
+          [intake.id, intake.amount_ml, intake.category, intake.intake_time, nowIso],
+          false
         );
       }
 
-      await db.execute('COMMIT;');
+      await db.commitTransaction();
     } catch (error) {
-      await db.execute('ROLLBACK;');
+      try {
+        const isActive = await db.isTransactionActive();
+        if (isActive.result) {
+          await db.rollbackTransaction();
+        }
+      } catch {
+        // Ignore rollback cleanup failures and rethrow original write error.
+      }
       throw error;
     }
   }

@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { ChevronLeft, Bell, Zap, Moon, Sun, Dumbbell, Calendar, Trash2 } from 'lucide-react';
 import type { SettingsResponse, SettingsUpdateRequest } from '../api';
 import { ReminderConfig, DoNotDisturbConfig } from '../types';
@@ -23,12 +24,16 @@ const DEFAULT_DND_END = '07:00';
 
 export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
   settings,
+  saving,
+  errorMessage,
+  wsConnected,
+  notificationPermission,
   onRequestNotificationPermission,
   onSaveSettings,
   onBack,
 }) => {
   const [reminders, setReminders] = useState<ReminderConfig[]>([
-    { id: '1', type: 'scene', label: '晨间饮水', time: '07:30', enabled: true },
+    { id: '1', type: 'scene', label: '晨间喝水', time: '07:30', enabled: true },
     { id: '2', type: 'scene', label: '睡前补水', time: '22:00', enabled: false },
   ]);
 
@@ -45,6 +50,9 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
 
   const [flashTestRunning, setFlashTestRunning] = useState(false);
   const [flashTestMessage, setFlashTestMessage] = useState<string | null>(null);
+  const [minuteTestEnabled, setMinuteTestEnabled] = useState(false);
+  const [minuteTestRunning, setMinuteTestRunning] = useState(false);
+  const [minuteTestMessage, setMinuteTestMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!settings) {
@@ -67,7 +75,8 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
     const nextEnabled = !intervalConfig.enabled;
     if (nextEnabled) {
       const permission = await onRequestNotificationPermission();
-      if (permission !== 'granted') {
+      const isNativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+      if (permission !== 'granted' && !isNativeAndroid) {
         setIntervalConfig((prev) => ({ ...prev, enabled: false }));
         return;
       }
@@ -125,8 +134,6 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
     try {
       const permission = await onRequestNotificationPermission();
       if (permission !== 'granted') {
-        // 部分厂商 ROM 会返回非 granted 状态，但系统设置里实际已授权。
-        // 继续调用原生插件，由原生层做最终权限判断。
         setFlashTestMessage('通知权限状态异常，继续尝试触发原生震动...');
       }
 
@@ -134,13 +141,47 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
       if (result.channelShouldVibrate === false) {
         setFlashTestMessage('已触发通知，但系统显示“震动关闭”。请点下方按钮进入应用通知管理页开启震动。');
       } else {
-        setFlashTestMessage('已触发 1s 测试震动，请观察手机和手表。');
+        setFlashTestMessage('已触发 1.5s 测试震动，请观察手机和手表。');
       }
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : 'unknown error';
       setFlashTestMessage(`触发失败: ${message}`);
     } finally {
       setFlashTestRunning(false);
+    }
+  };
+
+  const toggleOneMinuteIntervalTest = async () => {
+    setMinuteTestRunning(true);
+    setMinuteTestMessage(null);
+
+    try {
+      if (!minuteTestEnabled) {
+        const permission = await onRequestNotificationPermission();
+        const isNativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+        if (permission !== 'granted' && !isNativeAndroid) {
+          setMinuteTestMessage('请先授予通知权限后再开启 1 分钟测试。');
+          return;
+        }
+
+        const result = await FlashAlarmNotify.scheduleOneMinuteTestInterval();
+        setMinuteTestEnabled(true);
+        if (result.nextTriggerAt) {
+          const next = new Date(result.nextTriggerAt).toLocaleTimeString();
+          setMinuteTestMessage(`已开启 1 分钟临时测试，预计下次触发时间：${next}`);
+        } else {
+          setMinuteTestMessage('已开启 1 分钟临时测试，请锁屏等待约 1 分钟观察手机和手表。');
+        }
+      } else {
+        await FlashAlarmNotify.cancelOneMinuteTestInterval();
+        setMinuteTestEnabled(false);
+        setMinuteTestMessage('已关闭 1 分钟临时测试。');
+      }
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : 'unknown error';
+      setMinuteTestMessage(`1 分钟测试操作失败: ${message}`);
+    } finally {
+      setMinuteTestRunning(false);
     }
   };
 
@@ -316,7 +357,7 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
               </div>
             </div>
           )}
-          <p className="text-[10px] text-gray-400 mt-3 text-center">在此时间段内，将不会收到饮水提醒通知</p>
+          <p className="text-[10px] text-gray-400 mt-3 text-center">在此时段内，不会收到饮水提醒通知。</p>
         </div>
       </section>
 
@@ -334,8 +375,25 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
               flashTestRunning ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-[#0dc792] text-white hover:bg-[#0bb682]'
             }`}
           >
-            {flashTestRunning ? '触发中...' : '测试手表联动震动（1s）'}
+            {flashTestRunning ? '触发中...' : '测试手表联动震动（1.5s）'}
           </button>
+
+          <button
+            onClick={() => {
+              void toggleOneMinuteIntervalTest();
+            }}
+            disabled={minuteTestRunning}
+            className={`w-full rounded-xl px-4 py-3 text-sm font-bold transition-colors ${
+              minuteTestRunning
+                ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                : minuteTestEnabled
+                  ? 'bg-amber-500 text-white hover:bg-amber-600'
+                  : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+            }`}
+          >
+            {minuteTestRunning ? '处理中...' : minuteTestEnabled ? '关闭 1 分钟临时测试' : '开启 1 分钟临时测试'}
+          </button>
+
           <button
             onClick={() => {
               void FlashAlarmNotify.openChannelSettings();
@@ -344,7 +402,13 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
           >
             打开应用通知管理
           </button>
+
           {flashTestMessage && <p className="text-xs text-gray-500">{flashTestMessage}</p>}
+          {minuteTestMessage && <p className="text-xs text-gray-500">{minuteTestMessage}</p>}
+          <p className="text-[10px] text-gray-400">
+            状态：提醒服务{wsConnected ? '已连接' : '未连接'}，通知权限 {notificationPermission}，设置{saving ? '保存中' : '已同步'}。
+          </p>
+          {errorMessage && <p className="text-xs text-red-500">{errorMessage}</p>}
         </div>
       </section>
 

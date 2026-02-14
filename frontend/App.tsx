@@ -45,12 +45,17 @@ const DEFAULT_DRINKS: DrinkOption[] = [
 const DRINK_OPTIONS_KEY = 'drink_options';
 const FORCE_REFRESH_KEY = 'drink_options_refreshed_v2';
 
-const getTodayDate = (): string => new Date().toISOString().slice(0, 10);
+const getTodayDate = (): string => {
+  const date = new Date();
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+};
 
 const getTomorrowDate = (): string => {
-  const next = new Date();
-  next.setDate(next.getDate() + 1);
-  return next.toISOString().slice(0, 10);
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
 };
 
 const toUserProfile = (profile: ProfileResponse | null): UserProfile | undefined => {

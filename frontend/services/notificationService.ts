@@ -1,8 +1,9 @@
 import type { SettingsResponse } from '../api';
+import { Capacitor } from '@capacitor/core';
+import { FlashAlarmNotify } from '../src';
 import {
   cancelNotifications,
   ensureNotificationPermission,
-  ensureReminderChannel,
   getNotificationPermissionState,
   scheduleNotifications,
   SYSTEM_REMINDER_CHANNEL_ID
@@ -67,6 +68,33 @@ class NotificationService {
   async syncIntervalReminder(settings: SettingsResponse): Promise<void> {
     await cancelNotifications(createReminderIds());
 
+    const isNativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+
+    if (isNativeAndroid) {
+      if (!settings.reminder_enabled) {
+        await FlashAlarmNotify.cancelIntervalReminder();
+        return;
+      }
+
+      const permission = getNotificationPermissionState();
+      if (permission !== 'granted') {
+        await ensureNotificationPermission();
+      }
+
+      const intervalMinutes = normalizeIntervalMinutes(settings.reminder_interval_minutes);
+      try {
+        await FlashAlarmNotify.scheduleIntervalReminder({
+          intervalMinutes,
+          quietHoursEnabled: settings.quiet_hours_enabled,
+          quietHoursStart: settings.quiet_hours_start || '23:00',
+          quietHoursEnd: settings.quiet_hours_end || '07:00'
+        });
+      } catch {
+        await FlashAlarmNotify.cancelIntervalReminder();
+      }
+      return;
+    }
+
     if (!settings.reminder_enabled) {
       return;
     }
@@ -78,8 +106,6 @@ class NotificationService {
         return;
       }
     }
-
-    await ensureReminderChannel();
 
     const intervalMinutes = normalizeIntervalMinutes(settings.reminder_interval_minutes);
     const reminderMinutes = this.buildReminderMinutes(intervalMinutes, settings);
