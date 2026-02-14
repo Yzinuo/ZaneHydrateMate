@@ -9,6 +9,7 @@ import { ReminderSettings } from './pages/ReminderSettings';
 import { Home as HomeIcon, BarChart2, User, Bell } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { SplashScreen } from './components/SplashScreen';
+import { SplashScreen as CapacitorSplashScreen } from '@capacitor/splash-screen';
 import {
   ApiError,
   intakeApi,
@@ -190,6 +191,16 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // Hide the native splash screen when the React app is mounted
+    const hideSplash = async () => {
+      try {
+        await CapacitorSplashScreen.hide();
+      } catch (e) {
+        console.warn('SplashScreen hide failed', e);
+      }
+    };
+    hideSplash();
+    
     let cancelled = false;
 
     const run = async () => {
@@ -516,7 +527,7 @@ const App: React.FC = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5 }}
-          className="relative w-full h-screen bg-[#fbffff] overflow-hidden flex flex-col shadow-2xl"
+          className="relative w-full h-screen bg-[#fbffff] overflow-hidden flex flex-col shadow-2xl pt-[env(safe-area-inset-top)]"
         >
           <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide">{renderPage()}</div>
 
