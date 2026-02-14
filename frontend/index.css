@@ -27,3 +27,14 @@ body {
 .recharts-rectangle:focus, .recharts-bar-rectangle:focus {
   outline: none;
 }
+
+.recharts-wrapper *:focus {
+  outline: none !important;
+}
+
+.recharts-surface path:focus,
+.recharts-surface rect:focus,
+.recharts-layer:focus,
+.recharts-sector:focus {
+  outline: none !important;
+}
