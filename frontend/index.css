@@ -23,3 +23,7 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+.recharts-rectangle:focus, .recharts-bar-rectangle:focus {
+  outline: none;
+}
