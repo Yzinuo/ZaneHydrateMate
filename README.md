@@ -12,6 +12,12 @@
 
 ![readme.png](frontend/img/readme.png)
 
+使用界面：
+
+![界面1.jpg](frontend/img/界面1.jpg)
+![界面2.jpg](frontend/img/界面2.jpg)
+![界面3.jpg](frontend/img/界面3.jpg)
+
 这款 APP 融合了实用性与游戏化的乐趣，主要特点包括：
 
 *   **🌲 沉浸式森林首页 (Immersive Forest):**
