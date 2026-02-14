@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Page, UserState, UserProfile, DrinkOption } from './types';
 import { HomeModern } from './pages/HomeModern';
 import { Stats } from './pages/Stats';
@@ -164,6 +164,8 @@ const App: React.FC = () => {
 
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const settingsSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const settingsSavePendingRef = useRef(0);
 
   const [wsConnected, setWsConnected] = useState(false);
   const [notificationPermission, setNotificationPermission] =
@@ -358,17 +360,27 @@ const App: React.FC = () => {
   }, []);
 
   const handleSaveSettings = useCallback(async (patch: SettingsUpdateRequest) => {
-    setSettingsSaving(true);
-    setSettingsError(null);
+    const execute = async () => {
+      settingsSavePendingRef.current += 1;
+      setSettingsSaving(true);
+      setSettingsError(null);
 
-    try {
-      const updated = await settingsApi.update(patch);
-      setSettingsData(updated);
-    } catch (error) {
-      setSettingsError(getErrorMessage(error, '提醒设置保存失败'));
-    } finally {
-      setSettingsSaving(false);
-    }
+      try {
+        const updated = await settingsApi.update(patch);
+        setSettingsData(updated);
+      } catch (error) {
+        setSettingsError(getErrorMessage(error, '提醒设置保存失败'));
+      } finally {
+        settingsSavePendingRef.current = Math.max(0, settingsSavePendingRef.current - 1);
+        if (settingsSavePendingRef.current === 0) {
+          setSettingsSaving(false);
+        }
+      }
+    };
+
+    const next = settingsSaveQueueRef.current.then(execute, execute);
+    settingsSaveQueueRef.current = next.catch(() => undefined);
+    await next;
   }, []);
 
   const handleRequestNotificationPermission = useCallback(async (): Promise<NotificationPermissionState> => {

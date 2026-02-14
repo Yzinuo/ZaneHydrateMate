@@ -99,6 +99,29 @@ class FlashAlarmNotifyPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun scheduleSceneReminders(call: PluginCall) {
+        if (!hasPostNotificationPermission()) {
+            call.reject("POST_NOTIFICATIONS permission is required")
+            return
+        }
+
+        val remindersArray = call.data.optJSONArray("reminders")
+        val reminders = FlashAlarmSceneScheduler.parseReminders(remindersArray)
+        val nextTriggerAt = FlashAlarmSceneScheduler.schedule(context, reminders)
+
+        val result = JSObject()
+        result.put("scheduled", true)
+        result.put("nextTriggerAt", nextTriggerAt)
+        call.resolve(result)
+    }
+
+    @PluginMethod
+    fun cancelSceneReminders(call: PluginCall) {
+        FlashAlarmSceneScheduler.cancel(context)
+        call.resolve()
+    }
+
+    @PluginMethod
     fun scheduleOneMinuteTestInterval(call: PluginCall) {
         val nextTriggerAt = FlashAlarmIntervalScheduler.scheduleDebugEveryMinute(context)
         val result = JSObject()

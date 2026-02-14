@@ -8,6 +8,13 @@ export interface StoredProfile {
   age: number;
 }
 
+export interface StoredSceneReminder {
+  id: string;
+  label: string;
+  time: string;
+  enabled: boolean;
+}
+
 export interface StoredSettings {
   daily_goal_ml: number;
   reminder_intensity: number;
@@ -16,6 +23,7 @@ export interface StoredSettings {
   quiet_hours_enabled: boolean;
   quiet_hours_start: string;
   quiet_hours_end: string;
+  scene_reminders: StoredSceneReminder[];
 }
 
 export interface StoredIntake {
@@ -42,6 +50,7 @@ const SQLITE_DB_NAME = 'hydratemate_local';
 const SQLITE_MIGRATION_MARKER = 'legacy_localstorage_migrated_v1';
 const MIN_REMINDER_INTERVAL_MINUTES = 15;
 const MAX_REMINDER_INTERVAL_MINUTES = 720;
+const DEFAULT_SCENE_REMINDER_TIME = '09:00';
 
 const canUseLocalStorage = (): boolean => typeof window !== 'undefined' && !!window.localStorage;
 
@@ -83,6 +92,37 @@ const normalizeBoolean = (value: unknown, fallback: boolean): boolean => {
   return fallback;
 };
 
+const isValidTimeString = (value: string): boolean => /^\d{2}:\d{2}$/.test(value);
+
+const normalizeSceneReminders = (
+  value: unknown,
+  defaults: StoredSceneReminder[]
+): StoredSceneReminder[] => {
+  if (!Array.isArray(value)) {
+    return defaults.map((item) => ({ ...item }));
+  }
+
+  const reminders: StoredSceneReminder[] = [];
+  value.forEach((item, index) => {
+    if (!item || typeof item !== 'object') {
+      return;
+    }
+
+    const raw = item as Partial<StoredSceneReminder>;
+    reminders.push({
+      id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : `scene-${index + 1}`,
+      label: typeof raw.label === 'string' ? raw.label.trim() : '',
+      time:
+        typeof raw.time === 'string' && isValidTimeString(raw.time)
+          ? raw.time
+          : DEFAULT_SCENE_REMINDER_TIME,
+      enabled: normalizeBoolean(raw.enabled, true)
+    });
+  });
+
+  return reminders;
+};
+
 const isValidIntake = (value: unknown): value is StoredIntake => {
   if (!value || typeof value !== 'object') {
     return false;
@@ -101,7 +141,10 @@ const normalizeState = (value: unknown, defaults: StoredState): StoredState => {
   if (!value || typeof value !== 'object') {
     return {
       profile: { ...defaults.profile },
-      settings: { ...defaults.settings },
+      settings: {
+        ...defaults.settings,
+        scene_reminders: defaults.settings.scene_reminders.map((item) => ({ ...item }))
+      },
       intakes: []
     };
   }
@@ -138,7 +181,11 @@ const normalizeState = (value: unknown, defaults: StoredState): StoredState => {
       quiet_hours_end:
         typeof settings.quiet_hours_end === 'string'
           ? settings.quiet_hours_end
-          : defaults.settings.quiet_hours_end
+          : defaults.settings.quiet_hours_end,
+      scene_reminders: normalizeSceneReminders(
+        (settings as Partial<StoredSettings>).scene_reminders,
+        defaults.settings.scene_reminders
+      )
     },
     intakes
   };
@@ -262,6 +309,7 @@ class LocalDbStore {
         quiet_hours_enabled INTEGER NOT NULL DEFAULT 1,
         quiet_hours_start TEXT NOT NULL,
         quiet_hours_end TEXT NOT NULL,
+        scene_reminders TEXT NOT NULL DEFAULT '[]',
         updated_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS intakes (
@@ -295,7 +343,7 @@ class LocalDbStore {
     const settingsRows = (await db.query('SELECT id FROM settings WHERE id = 1;')).values || [];
     if (settingsRows.length === 0) {
       await db.run(
-        'INSERT INTO settings (id, daily_goal_ml, reminder_intensity, reminder_enabled, reminder_interval_minutes, quiet_hours_enabled, quiet_hours_start, quiet_hours_end, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?);',
+        'INSERT INTO settings (id, daily_goal_ml, reminder_intensity, reminder_enabled, reminder_interval_minutes, quiet_hours_enabled, quiet_hours_start, quiet_hours_end, scene_reminders, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
         [
           defaults.settings.daily_goal_ml,
           defaults.settings.reminder_intensity,
@@ -304,6 +352,7 @@ class LocalDbStore {
           defaults.settings.quiet_hours_enabled ? 1 : 0,
           defaults.settings.quiet_hours_start,
           defaults.settings.quiet_hours_end,
+          JSON.stringify(defaults.settings.scene_reminders),
           new Date().toISOString()
         ]
       );
@@ -336,6 +385,13 @@ class LocalDbStore {
         `ALTER TABLE settings ADD COLUMN quiet_hours_enabled INTEGER NOT NULL DEFAULT ${
           defaults.settings.quiet_hours_enabled ? 1 : 0
         };`
+      );
+    }
+    if (!existingColumns.has('scene_reminders')) {
+      await db.execute(
+        `ALTER TABLE settings ADD COLUMN scene_reminders TEXT NOT NULL DEFAULT '${JSON.stringify(
+          defaults.settings.scene_reminders
+        )}';`
       );
     }
   }
@@ -385,7 +441,7 @@ class LocalDbStore {
     ).values || [];
     const settingsRows = (
       await db.query(
-        'SELECT daily_goal_ml, reminder_intensity, reminder_enabled, reminder_interval_minutes, quiet_hours_enabled, quiet_hours_start, quiet_hours_end FROM settings WHERE id = 1 LIMIT 1;'
+        'SELECT daily_goal_ml, reminder_intensity, reminder_enabled, reminder_interval_minutes, quiet_hours_enabled, quiet_hours_start, quiet_hours_end, scene_reminders FROM settings WHERE id = 1 LIMIT 1;'
       )
     ).values || [];
     const intakeRows = (
@@ -416,7 +472,10 @@ class LocalDbStore {
             defaults.settings.quiet_hours_enabled
           ),
           quiet_hours_start: settingsRow.quiet_hours_start,
-          quiet_hours_end: settingsRow.quiet_hours_end
+          quiet_hours_end: settingsRow.quiet_hours_end,
+          scene_reminders: parseJson<StoredSceneReminder[]>(
+            typeof settingsRow.scene_reminders === 'string' ? settingsRow.scene_reminders : null
+          )
         },
         intakes: intakeRows
       },
@@ -428,7 +487,10 @@ class LocalDbStore {
     if (!canUseLocalStorage()) {
       return {
         profile: { ...defaults.profile },
-        settings: { ...defaults.settings },
+        settings: {
+          ...defaults.settings,
+          scene_reminders: defaults.settings.scene_reminders.map((item) => ({ ...item }))
+        },
         intakes: []
       };
     }
@@ -450,7 +512,7 @@ class LocalDbStore {
       );
 
       await db.run(
-        'INSERT OR REPLACE INTO settings (id, daily_goal_ml, reminder_intensity, reminder_enabled, reminder_interval_minutes, quiet_hours_enabled, quiet_hours_start, quiet_hours_end, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?);',
+        'INSERT OR REPLACE INTO settings (id, daily_goal_ml, reminder_intensity, reminder_enabled, reminder_interval_minutes, quiet_hours_enabled, quiet_hours_start, quiet_hours_end, scene_reminders, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
         [
           nextState.settings.daily_goal_ml,
           nextState.settings.reminder_intensity,
@@ -459,6 +521,7 @@ class LocalDbStore {
           nextState.settings.quiet_hours_enabled ? 1 : 0,
           nextState.settings.quiet_hours_start,
           nextState.settings.quiet_hours_end,
+          JSON.stringify(nextState.settings.scene_reminders),
           nowIso
         ],
         false

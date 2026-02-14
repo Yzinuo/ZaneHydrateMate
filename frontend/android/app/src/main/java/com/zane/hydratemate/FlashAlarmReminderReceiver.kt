@@ -17,6 +17,9 @@ class FlashAlarmReminderReceiver : BroadcastReceiver() {
             FlashAlarmIntervalScheduler.ACTION_DEBUG_INTERVAL_REMINDER -> {
                 FlashAlarmIntervalScheduler.onDebugAlarmReceived(context)
             }
+            FlashAlarmSceneScheduler.ACTION_SCENE_REMINDER -> {
+                FlashAlarmSceneScheduler.onAlarmReceived(context, intent)
+            }
         }
     }
 }

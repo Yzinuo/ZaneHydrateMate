@@ -1,8 +1,8 @@
-﻿import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { ChevronLeft, Bell, Zap, Moon, Sun, Dumbbell, Calendar, Trash2 } from 'lucide-react';
-import type { SettingsResponse, SettingsUpdateRequest } from '../api';
-import { ReminderConfig, DoNotDisturbConfig } from '../types';
+import type { SceneReminderSetting, SettingsResponse, SettingsUpdateRequest } from '../api';
+import { DoNotDisturbConfig } from '../types';
 import type { NotificationPermissionState } from '../services/notifications';
 import { TimePicker } from '../components/ui/time-picker';
 import { FlashAlarmNotify } from '../src';
@@ -21,6 +21,106 @@ interface ReminderSettingsProps {
 const DEFAULT_INTERVAL_MINUTES = 60;
 const DEFAULT_DND_START = '23:00';
 const DEFAULT_DND_END = '07:00';
+const DEFAULT_SCENE_REMINDERS: SceneReminderSetting[] = [
+  { id: '1', label: '晨间喝水', time: '07:30', enabled: true },
+  { id: '2', label: '睡前补水', time: '22:00', enabled: false },
+];
+const DEFAULT_SCENE_TIME = '09:00';
+const SCENE_TIME_PATTERN = /^\d{2}:\d{2}$/;
+const MINUTES_PER_DAY = 24 * 60;
+
+const normalizeIntervalMinutes = (value: number): number => {
+  const rounded = Math.round(value);
+  if (rounded < 15) {
+    return 15;
+  }
+  if (rounded > 720) {
+    return 720;
+  }
+  return rounded;
+};
+
+const gcd = (a: number, b: number): number => {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y !== 0) {
+    const temp = y;
+    y = x % y;
+    x = temp;
+  }
+  return x === 0 ? 1 : x;
+};
+
+const toMinutesOfDay = (value: string): number => {
+  const [hourText, minuteText] = value.split(':');
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(23, Math.floor(hour))) * 60 + Math.max(0, Math.min(59, Math.floor(minute)));
+};
+
+const isInQuietHours = (minuteOfDay: number, dnd: DoNotDisturbConfig): boolean => {
+  if (!dnd.enabled) {
+    return false;
+  }
+
+  const start = toMinutesOfDay(dnd.start);
+  const end = toMinutesOfDay(dnd.end);
+  if (start === end) {
+    return true;
+  }
+  if (start < end) {
+    return minuteOfDay >= start && minuteOfDay < end;
+  }
+  return minuteOfDay >= start || minuteOfDay < end;
+};
+
+const pad2 = (value: number): string => String(value).padStart(2, '0');
+
+const formatMinuteOfDay = (minuteOfDay: number): string => {
+  const hour = Math.floor(minuteOfDay / 60);
+  const minute = minuteOfDay % 60;
+  return `${pad2(hour)}:${pad2(minute)}`;
+};
+
+const buildIntervalReminderMinutes = (intervalMinutes: number, dnd: DoNotDisturbConfig): number[] => {
+  const minutes: number[] = [];
+  const normalizedInterval = normalizeIntervalMinutes(intervalMinutes);
+  const slotsPerDay = Math.max(1, MINUTES_PER_DAY / gcd(MINUTES_PER_DAY, normalizedInterval));
+  for (let slot = 0; slot < slotsPerDay; slot += 1) {
+    const minuteOfDay = (slot * normalizedInterval) % MINUTES_PER_DAY;
+    if (!isInQuietHours(minuteOfDay, dnd)) {
+      minutes.push(minuteOfDay);
+    }
+  }
+  return minutes.sort((a, b) => a - b);
+};
+
+const createDefaultSceneReminders = (): SceneReminderSetting[] =>
+  DEFAULT_SCENE_REMINDERS.map((item) => ({ ...item }));
+
+const normalizeSceneReminders = (value: SceneReminderSetting[] | undefined): SceneReminderSetting[] => {
+  if (!Array.isArray(value)) {
+    return createDefaultSceneReminders();
+  }
+
+  return value.map((item, index) => ({
+    id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `scene-${index + 1}`,
+    label: typeof item.label === 'string' ? item.label : '',
+    time: typeof item.time === 'string' && SCENE_TIME_PATTERN.test(item.time) ? item.time : DEFAULT_SCENE_TIME,
+    enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
+  }));
+};
+
+const generateSceneReminderId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
 
 export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
   settings,
@@ -32,10 +132,8 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
   onSaveSettings,
   onBack,
 }) => {
-  const [reminders, setReminders] = useState<ReminderConfig[]>([
-    { id: '1', type: 'scene', label: '晨间喝水', time: '07:30', enabled: true },
-    { id: '2', type: 'scene', label: '睡前补水', time: '22:00', enabled: false },
-  ]);
+  const [reminders, setReminders] = useState<SceneReminderSetting[]>(() => createDefaultSceneReminders());
+  const remindersRef = useRef<SceneReminderSetting[]>(createDefaultSceneReminders());
 
   const [dndConfig, setDndConfig] = useState<DoNotDisturbConfig>({
     enabled: true,
@@ -53,6 +151,42 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
   const [minuteTestEnabled, setMinuteTestEnabled] = useState(false);
   const [minuteTestRunning, setMinuteTestRunning] = useState(false);
   const [minuteTestMessage, setMinuteTestMessage] = useState<string | null>(null);
+  const [timeNow, setTimeNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setTimeNow(Date.now());
+    }, 30000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const nextIntervalReminderText = useMemo(() => {
+    if (!intervalConfig.enabled) {
+      return '下一次提醒：未开启';
+    }
+
+    const reminderMinutes = buildIntervalReminderMinutes(intervalConfig.minutes, dndConfig);
+    if (reminderMinutes.length === 0) {
+      return '下一次提醒：当前免打扰覆盖全天';
+    }
+
+    const now = new Date(timeNow);
+    const nowMinute = now.getHours() * 60 + now.getMinutes() + (now.getSeconds() > 0 ? 1 : 0);
+    let dayOffset = 0;
+    let nextMinute = reminderMinutes.find((value) => value >= nowMinute);
+    if (nextMinute === undefined) {
+      dayOffset = 1;
+      nextMinute = reminderMinutes[0];
+    }
+
+    return `下一次提醒：${dayOffset === 1 ? '明天 ' : ''}${formatMinuteOfDay(nextMinute)}`;
+  }, [intervalConfig.enabled, intervalConfig.minutes, dndConfig, timeNow]);
+
+  useEffect(() => {
+    remindersRef.current = reminders;
+  }, [reminders]);
 
   useEffect(() => {
     if (!settings) {
@@ -69,6 +203,8 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
       start: settings.quiet_hours_start || DEFAULT_DND_START,
       end: settings.quiet_hours_end || DEFAULT_DND_END,
     });
+
+    setReminders(normalizeSceneReminders(settings.scene_reminders));
   }, [settings]);
 
   const toggleInterval = async () => {
@@ -91,24 +227,34 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
     await onSaveSettings({ reminder_interval_minutes: minutes });
   };
 
+  const saveSceneReminders = async (next: SceneReminderSetting[]) => {
+    await onSaveSettings({ scene_reminders: next });
+  };
+
+  const updateSceneReminders = (updater: (prev: SceneReminderSetting[]) => SceneReminderSetting[]) => {
+    const next = updater(remindersRef.current);
+    remindersRef.current = next;
+    setReminders(next);
+    void saveSceneReminders(next);
+  };
+
   const toggleReminder = (id: string) => {
-    setReminders((prev) => prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)));
+    updateSceneReminders((prev) => prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)));
   };
 
   const deleteReminder = (id: string) => {
-    setReminders((prev) => prev.filter((r) => r.id !== id));
+    updateSceneReminders((prev) => prev.filter((r) => r.id !== id));
   };
 
   const addSceneReminder = (label: string, time: string) => {
-    const newReminder: ReminderConfig = {
-      id: Date.now().toString(),
-      type: 'scene',
+    const newReminder: SceneReminderSetting = {
+      id: generateSceneReminderId(),
       label,
       time,
       enabled: true,
     };
 
-    setReminders((prev) => [...prev, newReminder]);
+    updateSceneReminders((prev) => [...prev, newReminder]);
   };
 
   const updateDnd = async (key: keyof DoNotDisturbConfig, value: string | boolean) => {
@@ -221,7 +367,8 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
             intervalConfig.enabled ? 'border-[#0dc792]/30 shadow-[#0dc792]/10' : 'border-gray-100'
           }`}
         >
-          <p className="text-xs text-gray-400 mb-3">开启后，应用将按照设定的时间间隔持续发送提醒。</p>
+          <p className="text-xs text-gray-400 mb-1">开启后，应用将按照设定的时间间隔持续发送提醒。</p>
+          <p className="text-[11px] text-gray-400 mb-3">{nextIntervalReminderText}</p>
           <div className="grid grid-cols-3 gap-3">
             {[
               { min: 30, label: '30分钟' },
@@ -260,9 +407,7 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
         </div>
 
         <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100 overflow-hidden">
-          {reminders
-            .filter((r) => r.type === 'scene')
-            .map((r, index) => (
+          {reminders.map((r, index) => (
               <div key={r.id} className={`p-4 flex items-center justify-between ${index !== 0 ? 'border-t border-gray-50' : ''}`}>
                 <div className="flex items-center gap-3">
                   <div
@@ -275,17 +420,13 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
                   <div>
                     <input
                       value={r.label}
-                      onChange={(e) =>
-                        setReminders((prev) => prev.map((item) => (item.id === r.id ? { ...item, label: e.target.value } : item)))
-                      }
+                      onChange={(e) => updateSceneReminders((prev) => prev.map((item) => (item.id === r.id ? { ...item, label: e.target.value } : item)))}
                       className="font-bold text-gray-800 bg-transparent outline-none w-24"
                     />
                     <div className="text-xs text-gray-400 mt-1">
                       <TimePicker
                         value={r.time || '09:00'}
-                        onChange={(val) =>
-                          setReminders((prev) => prev.map((item) => (item.id === r.id ? { ...item, time: val } : item)))
-                        }
+                        onChange={(val) => updateSceneReminders((prev) => prev.map((item) => (item.id === r.id ? { ...item, time: val } : item)))}
                         className="h-8 border-none p-0 text-xs text-gray-400 font-normal w-auto shadow-none"
                       />
                     </div>
@@ -416,3 +557,7 @@ export const ReminderSettings: React.FC<ReminderSettingsProps> = ({
     </div>
   );
 };
+
+
+
+
